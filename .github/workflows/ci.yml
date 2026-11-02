@@ -28,8 +28,8 @@ jobs:
         with:
           enable-cache: true
           # El proyecto no usa uv.lock (instalamos con uv venv + uv pip install),
-          # así que no hay fichero de dependencias que cachear.
-          ignore-nothing-to-cache: true
+          # así que la clave de caché se calcula sobre pyproject.toml.
+          cache-dependency-glob: "**/pyproject.toml"
 
       - name: Configurar Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -62,7 +62,7 @@ jobs:
         uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
-          ignore-nothing-to-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
 
       # Comprueba que la CLI se instala como comando global igual que haría un
       # usuario con `uv tool install git+https://.../cli-limpiador.git`.
