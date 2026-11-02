@@ -42,10 +42,7 @@ jobs:
         run: uv venv --python "${{ matrix.python-version }}" && uv pip install -e ".[dev]"
 
       - name: DEBUG volcado de --help
-        run: |
-          env | grep -Ei '^(TERM|COLUMNS|.*COLUMNS|.*COLOR.*|CI|TERM_PROGRAM)' | sort || true
-          uv run --no-sync python -c "from typer.testing import CliRunner; from limpiador.cli import app; import json; print(json.dumps(CliRunner().invoke(app, ['--help']).output))"
-          COLUMNS=200 uv run --no-sync python -c "from typer.testing import CliRunner; from limpiador.cli import app; import json; print(json.dumps(CliRunner().invoke(app, ['--help']).output))"
+        run: uv run --no-sync pytest tests/test_zdebug_ci.py -s -q
 
       - name: Linting (ruff)
         run: uv run --no-sync ruff check
