@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "acciones": [
+    {
+      "nombre": "mover-imagenes",
+      "descripcion": "Mueve imágenes a una carpeta imagenes/",
+      "operacion": "mover",
+      "patrones": ["*.png", "*.jpg", "*.jpeg", "*.webp"],
+      "destino": "imagenes"
+    },
+    {
+      "nombre": "borrar-temporales",
+      "descripcion": "Borra ficheros temporales .tmp",
+      "operacion": "borrar",
+      "patrones": ["*.tmp"]
+    },
+    {
+      "nombre": "ordenar-documentos",
+      "descripcion": "Mueve PDF y DOCX a documentos/",
+      "operacion": "mover",
+      "patrones": ["*.pdf", "*.docx"],
+      "destino": "documentos"
+    },
+    {
+      "nombre": "renombrar-viejos",
+      "descripcion": "Añade el sufijo -revisar a los .txt para revisarlos",
+      "operacion": "renombrar",
+      "patrones": ["*.txt"],
+      "sufijo": "revisar"
+    }
+  ]
+}
