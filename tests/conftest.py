@@ -7,13 +7,20 @@ REGLA DE ORO: ningún test toca ficheros reales. Todo se crea dentro de
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 import pytest
 from typer.testing import CliRunner, Result
 
-from limpiador.cli import app
+# NO_COLOR debe estar definido ANTES de importar limpiador.cli: su Console de
+# Rich fija el sistema de color en la importación. En entornos sin TERM (como
+# GitHub Actions) Rich emite ANSI y parte palabras como `--config` en spans
+# de estilo distintos, rompiendo las comprobaciones por substring.
+os.environ["NO_COLOR"] = "1"
+
+from limpiador.cli import app  # noqa: E402
 
 # Configuración de ejemplo con las 4 operaciones que usan los tests.
 CONFIG_VALIDA: dict[str, Any] = {
@@ -51,13 +58,19 @@ CONFIG_VALIDA: dict[str, Any] = {
 
 
 @pytest.fixture(autouse=True)
-def _anchura_consola(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensancha la consola de Rich para que las tablas no partan los textos.
+def _salida_determinista(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Consola de Rich ancha y sin códigos ANSI para que los tests sean estables.
 
     Rich respeta la variable de entorno COLUMNS; con 200 columnas podemos
     buscar frases completas en la salida de los tests sin problemas.
+
+    NO_COLOR desactiva los códigos de escape: en algunos entornos (p. ej.
+    GitHub Actions, sin TERM) Rich emite ANSI y parte palabras como
+    `--config` en spans de estilo distintos, rompiendo las comprobaciones
+    por substring sobre la salida en crudo.
     """
     monkeypatch.setenv("COLUMNS", "200")
+    monkeypatch.setenv("NO_COLOR", "1")
 
 
 @pytest.fixture()
