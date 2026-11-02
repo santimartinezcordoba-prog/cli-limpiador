@@ -30,5 +30,5 @@ y el proyecto admite [versionado semántico](https://semver.org/lang/es/).
 - CI con GitHub Actions (ruff, mypy, pytest, humo de instalación) en Python
   3.10, 3.11 y 3.12.
 
-[unreleased]: https://github.com/TU_USUARIO/cli-limpiador/compare/v1.0...HEAD
-[1.0.0]: https://github.com/TU_USUARIO/cli-limpiador/releases/tag/v1.0
+[unreleased]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.0...HEAD
+[1.0.0]: https://github.com/santimartinezcordoba-prog/cli-limpiador/releases/tag/v1.0
