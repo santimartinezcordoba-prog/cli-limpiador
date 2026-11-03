@@ -7,13 +7,30 @@ REGLA DE ORO: ningún test toca ficheros reales. Todo se crea dentro de
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 import pytest
 from typer.testing import CliRunner, Result
 
-from limpiador.cli import app
+from limpiador.cli import app, console
+
+# Regex que elimina cualquier secuencia de escape ANSI (códigos de color,
+# estilos, cursor...). Se usa en `salida_normalizada` para que las
+# comprobaciones por substring no se rompan si Rich emite decoraciones.
+ANSI: re.Pattern[str] = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
+
+
+def salida_normalizada(texto: str) -> str:
+    """Quita códigos ANSI y espacios sobrantes de una salida de la CLI.
+
+    Con esto, `assert "--config" in salida_normalizada(...)` funciona
+    igual da que Rich pinte la palabra en negrita, en color o partido en
+    varios spans: el texto de fondo siempre queda limpio y contiguo.
+    """
+    sin_ansi = ANSI.sub("", texto)
+    return re.sub(r"\s+", " ", sin_ansi)
 
 # Configuración de ejemplo con las 4 operaciones que usan los tests.
 CONFIG_VALIDA: dict[str, Any] = {
@@ -51,13 +68,17 @@ CONFIG_VALIDA: dict[str, Any] = {
 
 
 @pytest.fixture(autouse=True)
-def _anchura_consola(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensancha la consola de Rich para que las tablas no partan los textos.
+def _salida_determinista(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Consola de Rich ancha para que los tests sean estables.
 
-    Rich respeta la variable de entorno COLUMNS; con 200 columnas podemos
-    buscar frases completas en la salida de los tests sin problemas.
+    COLUMNS=200 evita que Rich parta las líneas en columnas estrechas: así
+    siempre podemos buscar frases completas. Los códigos ANSI, si los
+    hubiera, se eliminan en cada test con `salida_normalizada`, por lo que
+    el resultado no depende de cómo cada versión de Rich detecte la
+    terminal (en GitHub Actions llegaba a emitir escapes pese a NO_COLOR).
     """
     monkeypatch.setenv("COLUMNS", "200")
+    monkeypatch.setattr(console, "_width", 200)
 
 
 @pytest.fixture()
