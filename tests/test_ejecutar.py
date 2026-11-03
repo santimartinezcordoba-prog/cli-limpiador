@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from conftest import instantanea, llamar
+from conftest import instantanea, llamar, salida_normalizada
 from limpiador.cli import EXIT_ERROR, EXIT_OK, EXIT_SIN_CONFIRMAR
 
 
@@ -25,11 +25,12 @@ def test_simular_muestra_el_plan_sin_tocar_nada(
         runner, ["ejecutar", "mover-imagenes", str(carpeta_pruebas), "--simular"],
         config=config_valida,
     )
+    salida = salida_normalizada(resultado.output)
 
     assert resultado.exit_code == EXIT_OK
     # Anuncia que es una simulación y menciona los ficheros que movería.
-    assert "Simulación" in resultado.output
-    assert "foto.png" in resultado.output
+    assert "Simulación" in salida
+    assert "foto.png" in salida
     # La prueba de fuego: ni un solo byte cambió en el disco.
     assert instantanea(carpeta_pruebas) == antes
     # Y no se ha creado la carpeta de destino.
@@ -124,10 +125,11 @@ def test_sin_tty_y_sin_si_se_niega_y_sale_2(
         runner, ["ejecutar", "mover-imagenes", str(carpeta_pruebas)],
         config=config_valida,
     )
+    salida = salida_normalizada(resultado.output)
 
     assert resultado.exit_code == EXIT_SIN_CONFIRMAR
     # Pedir explícitamente --si en contexto no interactivo.
-    assert "--si" in resultado.output
+    assert "--si" in salida
     # Y, por supuesto, no mueve nada.
     assert (carpeta_pruebas / "foto.png").is_file()
 
@@ -160,9 +162,10 @@ def test_confirmacion_negativa_no_toca_nada(
         config=config_valida,
         entrada="n\n",
     )
+    salida = salida_normalizada(resultado.output)
 
     assert resultado.exit_code == EXIT_OK
-    assert "Cancelado" in resultado.output
+    assert "Cancelado" in salida
     assert instantanea(carpeta_pruebas) == antes
 
 
@@ -173,9 +176,10 @@ def test_simular_y_si_juntas_es_error(runner: CliRunner, carpeta_pruebas, config
         ["ejecutar", "mover-imagenes", str(carpeta_pruebas), "--simular", "--si"],
         config=config_valida,
     )
+    salida = salida_normalizada(resultado.output)
 
     assert resultado.exit_code == EXIT_SIN_CONFIRMAR
-    assert "incompatibles" in resultado.output
+    assert "incompatibles" in salida
 
 
 # --------------------------------------------------------------------------- #
@@ -215,11 +219,12 @@ def test_accion_inexistente_muestra_error_y_alternativas(
         runner, ["ejecutar", "no-existe", str(carpeta_pruebas), "--simular"],
         config=config_valida,
     )
+    salida = salida_normalizada(resultado.output)
 
     assert resultado.exit_code == EXIT_ERROR
-    assert "no existe la acción 'no-existe'" in resultado.output
+    assert "no existe la acción 'no-existe'" in salida
     # Ayuda al usuario enumerando las acciones reales.
-    assert "mover-imagenes" in resultado.output
+    assert "mover-imagenes" in salida
 
 
 # --------------------------------------------------------------------------- #
@@ -235,6 +240,7 @@ def test_carpeta_inexistente_al_ejecutar(
         runner, ["ejecutar", "mover-imagenes", str(ruta_falsa), "--si"],
         config=config_valida,
     )
+    salida = salida_normalizada(resultado.output)
 
     assert resultado.exit_code == EXIT_ERROR
-    assert "no existe" in resultado.output
+    assert "no existe" in salida

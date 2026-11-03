@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from conftest import CONFIG_VALIDA, escribir_config, llamar
+from conftest import CONFIG_VALIDA, escribir_config, llamar, salida_normalizada
 from limpiador.cli import EXIT_CONFIG_INVALIDA, EXIT_OK
 
 
@@ -22,8 +22,10 @@ def test_config_valida_sale_con_cero(runner: CliRunner, tmp_path: Path) -> None:
 
     resultado = llamar(runner, ["validar"], config=config)
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_OK
-    assert "válido" in resultado.output
+    assert "válido" in salida
 
 
 def test_por_defecto_usa_acciones_json_del_cwd(
@@ -41,9 +43,10 @@ def test_por_defecto_usa_acciones_json_del_cwd(
 def test_config_inexistente(runner: CliRunner, tmp_path: Path) -> None:
     """Si el fichero no existe, error claro y código 3."""
     resultado = llamar(runner, ["validar"], config=tmp_path / "nadie.json")
+    salida = salida_normalizada(resultado.output)
 
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert "no existe" in resultado.output
+    assert "no existe" in salida
 
 
 def test_json_mal_formado(runner: CliRunner, tmp_path: Path) -> None:
@@ -52,10 +55,12 @@ def test_json_mal_formado(runner: CliRunner, tmp_path: Path) -> None:
 
     resultado = llamar(runner, ["validar"], config=config)
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
     # El usuario ve que el JSON está roto y dónde (línea y columna).
-    assert "JSON mal formado" in resultado.output
-    assert "línea" in resultado.output
+    assert "JSON mal formado" in salida
+    assert "línea" in salida
 
 
 def test_falta_la_lista_de_acciones(runner: CliRunner, tmp_path: Path) -> None:
@@ -64,8 +69,10 @@ def test_falta_la_lista_de_acciones(runner: CliRunner, tmp_path: Path) -> None:
 
     resultado = llamar(runner, ["validar"], config=config)
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert "acciones: campo requerido" in resultado.output
+    assert "acciones: campo requerido" in salida
 
 
 def test_accion_sin_nombre(runner: CliRunner, tmp_path: Path) -> None:
@@ -75,8 +82,10 @@ def test_accion_sin_nombre(runner: CliRunner, tmp_path: Path) -> None:
 
     resultado = llamar(runner, ["validar"], config=escribir_config(tmp_path, datos))
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert "acciones[0].nombre: campo requerido" in resultado.output
+    assert "acciones[0].nombre: campo requerido" in salida
 
 
 def test_accion_sin_descripcion(runner: CliRunner, tmp_path: Path) -> None:
@@ -86,8 +95,10 @@ def test_accion_sin_descripcion(runner: CliRunner, tmp_path: Path) -> None:
 
     resultado = llamar(runner, ["validar"], config=escribir_config(tmp_path, datos))
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert "acciones[1].descripcion: campo requerido" in resultado.output
+    assert "acciones[1].descripcion: campo requerido" in salida
 
 
 def test_operacion_no_soportada(runner: CliRunner, tmp_path: Path) -> None:
@@ -97,8 +108,10 @@ def test_operacion_no_soportada(runner: CliRunner, tmp_path: Path) -> None:
 
     resultado = llamar(runner, ["validar"], config=escribir_config(tmp_path, datos))
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert "acciones[1].operacion: valor no soportado" in resultado.output
+    assert "acciones[1].operacion: valor no soportado" in salida
 
 
 def test_mover_sin_destino(runner: CliRunner, tmp_path: Path) -> None:
@@ -108,8 +121,10 @@ def test_mover_sin_destino(runner: CliRunner, tmp_path: Path) -> None:
 
     resultado = llamar(runner, ["validar"], config=escribir_config(tmp_path, datos))
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert "acciones[0].destino: campo requerido" in resultado.output
+    assert "acciones[0].destino: campo requerido" in salida
 
 
 def test_accion_sin_patrones(runner: CliRunner, tmp_path: Path) -> None:
@@ -119,8 +134,10 @@ def test_accion_sin_patrones(runner: CliRunner, tmp_path: Path) -> None:
 
     resultado = llamar(runner, ["validar"], config=escribir_config(tmp_path, datos))
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert "acciones[2].patrones: campo requerido" in resultado.output
+    assert "acciones[2].patrones: campo requerido" in salida
 
 
 def test_patron_con_path_traversal(runner: CliRunner, tmp_path: Path) -> None:
@@ -130,8 +147,10 @@ def test_patron_con_path_traversal(runner: CliRunner, tmp_path: Path) -> None:
 
     resultado = llamar(runner, ["validar"], config=escribir_config(tmp_path, datos))
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert "acciones[0].patrones[0]: patrón inválido o no seguro" in resultado.output
+    assert "acciones[0].patrones[0]: patrón inválido o no seguro" in salida
 
 
 def test_destino_con_path_traversal(runner: CliRunner, tmp_path: Path) -> None:
@@ -141,8 +160,10 @@ def test_destino_con_path_traversal(runner: CliRunner, tmp_path: Path) -> None:
 
     resultado = llamar(runner, ["validar"], config=escribir_config(tmp_path, datos))
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert "acciones[0].destino: debe ser una ruta relativa segura" in resultado.output
+    assert "acciones[0].destino: debe ser una ruta relativa segura" in salida
 
 
 def test_varios_errores_se_reportan_a_la_vez(runner: CliRunner, tmp_path: Path) -> None:
@@ -153,9 +174,11 @@ def test_varios_errores_se_reportan_a_la_vez(runner: CliRunner, tmp_path: Path) 
 
     resultado = llamar(runner, ["validar"], config=escribir_config(tmp_path, datos))
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert "acciones[0].nombre: campo requerido" in resultado.output
-    assert "acciones[1].operacion: valor no soportado" in resultado.output
+    assert "acciones[0].nombre: campo requerido" in salida
+    assert "acciones[1].operacion: valor no soportado" in salida
 
 
 def test_acciones_replicadas_se_detectan(runner: CliRunner, tmp_path: Path) -> None:
@@ -165,5 +188,7 @@ def test_acciones_replicadas_se_detectan(runner: CliRunner, tmp_path: Path) -> N
 
     resultado = llamar(runner, ["validar"], config=escribir_config(tmp_path, datos))
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert "nombre duplicado" in resultado.output
+    assert "nombre duplicado" in salida

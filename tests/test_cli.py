@@ -11,22 +11,28 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from conftest import instantanea, llamar
+from conftest import instantanea, llamar, salida_normalizada
 from limpiador import __version__
 from limpiador.cli import EXIT_ERROR
 
 
 def test_ayuda_enumera_todas_las_ordenes(runner: CliRunner) -> None:
-    """`limpiador --help` debe listar todas las órdenes y la opción --config."""
+    """`limpiador --help` debe listar todas las órdenes y la opción --config.
+
+    La salida se normaliza (sin códigos ANSI ni espacios sobrantes) antes de
+    buscar: así el test no depende de cómo Rich decore la ayuda según la
+    terminal del entorno (local, GitHub Actions...).
+    """
     resultado = llamar(runner, ["--help"])
+    salida = salida_normalizada(resultado.output)
 
     # La ayuda general siempre debe funcionar.
     assert resultado.exit_code == 0
     # Todas las órdenes obligatorias aparecen en la ayuda.
     for orden in ("version", "listar", "acciones", "validar", "ejecutar"):
-        assert orden in resultado.output, f"la orden '{orden}' no aparece en --help"
+        assert orden in salida, f"la orden '{orden}' no aparece en --help"
     # La opción global --config también debe documentarse.
-    assert "--config" in resultado.output
+    assert "--config" in salida
 
 
 def test_version_muestra_la_version_instalada(runner: CliRunner) -> None:
@@ -37,9 +43,10 @@ def test_version_muestra_la_version_instalada(runner: CliRunner) -> None:
     cuando se suba de versión.
     """
     resultado = llamar(runner, ["version"])
+    salida = salida_normalizada(resultado.output)
 
     assert resultado.exit_code == 0
-    assert __version__ in resultado.output
+    assert __version__ in salida
 
 
 def test_listar_muestra_nombre_tipo_tamano_y_fecha(
@@ -47,16 +54,17 @@ def test_listar_muestra_nombre_tipo_tamano_y_fecha(
 ) -> None:
     """`limpiador listar` pinta una tabla con los ficheros de la carpeta."""
     resultado = llamar(runner, ["listar", str(carpeta_pruebas)])
+    salida = salida_normalizada(resultado.output)
 
     assert resultado.exit_code == 0
     # Deben verse los ficheros creados en la carpeta temporal...
     for nombre in ("foto.png", "selfie.jpg", "informe.pdf", "nota.docx", "datos.tmp"):
-        assert nombre in resultado.output, f"'{nombre}' no aparece en la tabla"
+        assert nombre in salida, f"'{nombre}' no aparece en la tabla"
     # ...y las cabeceras de las columnas exigidas.
-    assert "Nombre" in resultado.output
-    assert "Tipo" in resultado.output
-    assert "Tamaño" in resultado.output
-    assert "Modificado" in resultado.output
+    assert "Nombre" in salida
+    assert "Tipo" in salida
+    assert "Tamaño" in salida
+    assert "Modificado" in salida
 
 
 def test_listar_no_modifica_nada(
@@ -79,10 +87,12 @@ def test_listar_carpeta_inexistente_da_error_claro(
 
     resultado = llamar(runner, ["listar", str(ruta_falsa)])
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == EXIT_ERROR
     # El mensaje debe decir el problema y la carpeta implicada.
-    assert "no existe" in resultado.output
-    assert "no-existe" in resultado.output
+    assert "no existe" in salida
+    assert "no-existe" in salida
 
 
 def test_listar_por_defecto_usa_la_carpeta_actual(
@@ -93,9 +103,11 @@ def test_listar_por_defecto_usa_la_carpeta_actual(
 
     resultado = llamar(runner, ["listar"])
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == 0
     # Al estar dentro de la carpeta de pruebas, sus ficheros aparecen.
-    assert "foto.png" in resultado.output
+    assert "foto.png" in salida
 
 
 def test_acciones_lista_todas_las_acciones_con_descripcion(
@@ -103,12 +115,13 @@ def test_acciones_lista_todas_las_acciones_con_descripcion(
 ) -> None:
     """`limpiador acciones` muestra nombre, operación y descripción de cada una."""
     resultado = llamar(runner, ["acciones"], config=config_valida)
+    salida = salida_normalizada(resultado.output)
 
     assert resultado.exit_code == 0
     # Cada acción del JSON debe verse con su nombre y su descripción.
     for accion in ("mover-imagenes", "borrar-temporales", "ordenar-documentos"):
-        assert accion in resultado.output
-    assert "Mueve imágenes a una carpeta imagenes/" in resultado.output
+        assert accion in salida
+    assert "Mueve imágenes a una carpeta imagenes/" in salida
 
 
 def test_acciones_con_config_alternativa(
@@ -131,6 +144,8 @@ def test_acciones_con_config_alternativa(
 
     resultado = llamar(runner, ["acciones"], config=personal)
 
+    salida = salida_normalizada(resultado.output)
+
     assert resultado.exit_code == 0
-    assert "mi-accion-solo-mia" in resultado.output
-    assert "mover-imagenes" not in resultado.output
+    assert "mi-accion-solo-mia" in salida
+    assert "mover-imagenes" not in salida
