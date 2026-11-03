@@ -7,6 +7,17 @@ y el proyecto admite [versionado semántico](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-03
+
+### Corregido
+
+- Pruebas: las comparaciones de la salida de la CLI se normalizan (se
+  eliminan los códigos ANSI de Rich) para que los `assert` por substring no
+  dependan de la terminal del entorno. Esto arreglaba un fallo intermitente
+  de CI (`test_ayuda_enumera_todas_las_ordenes`) con versiones recientes de
+  Rich, que emitía escapes pese a `NO_COLOR`.
+- README: las órdenes de instalación usan ya la ruta real del repositorio.
+
 ## [1.0.0] - 2026-11-02
 
 ### Añadido
@@ -30,5 +41,6 @@ y el proyecto admite [versionado semántico](https://semver.org/lang/es/).
 - CI con GitHub Actions (ruff, mypy, pytest, humo de instalación) en Python
   3.10, 3.11 y 3.12.
 
-[unreleased]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.0...HEAD
+[unreleased]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.0...v1.0.1
 [1.0.0]: https://github.com/santimartinezcordoba-prog/cli-limpiador/releases/tag/v1.0

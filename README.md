@@ -22,13 +22,13 @@ ejecuta, con simulación previa y confirmaciones de seguridad.
 Con **uv**:
 
 ```bash
-uv tool install git+https://github.com/TU_USUARIO/cli-limpiador.git
+uv tool install git+https://github.com/santimartinezcordoba-prog/cli-limpiador.git
 ```
 
 Con **pipx**:
 
 ```bash
-pipx install git+https://github.com/TU_USUARIO/cli-limpiador.git
+pipx install git+https://github.com/santimartinezcordoba-prog/cli-limpiador.git
 ```
 
 Después la CLI queda disponible globalmente como `limpiador`:
