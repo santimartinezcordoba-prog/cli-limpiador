@@ -31,8 +31,11 @@ LISTA_OPERACIONES: Final[str] = ", ".join(OPERACIONES_VALIDAS)
 
 # Campos admitidos en cada acción (los extra se rechazan con extra="forbid").
 CAMPOS_ACEPTADOS: Final[frozenset[str]] = frozenset(
-    {"nombre", "descripcion", "operacion", "patrones", "destino", "sufijo"}
+    {"nombre", "descripcion", "operacion", "patrones", "destino", "sufijo", "papelera"}
 )
+
+# Operaciones para las que tiene sentido activar la papelera.
+OPERACIONES_CON_PAPELERA: Final[frozenset[str]] = frozenset({"borrar", "dedup"})
 
 
 class ConfigInvalidaError(Exception):
@@ -81,12 +84,33 @@ class Accion(BaseModel):
     patrones: tuple[str, ...] = Field(min_length=1)
     destino: str | None = None
     sufijo: str | None = Field(default=None, min_length=1)
+    # true -> papelera por defecto (<carpeta>/papelera); "DIR" -> <carpeta>/DIR.
+    papelera: bool | str | None = None
 
     @field_validator("operacion")
     @classmethod
     def _operacion_en_whitelist(cls, valor: str) -> str:
         if valor not in OPERACIONES_VALIDAS:
             raise ValueError(f"valor no soportado (permitido: {LISTA_OPERACIONES})")
+        return valor
+
+    @field_validator("papelera")
+    @classmethod
+    def _papelera_coherente(
+        cls, valor: bool | str | None, info: ValidationInfo
+    ) -> bool | str | None:
+        if isinstance(valor, str):
+            if not valor:
+                raise ValueError("debe ser un texto no vacío")
+            if not es_ruta_segura(valor):
+                raise ValueError("debe ser una ruta relativa segura")
+        operacion = info.data.get("operacion")
+        if (
+            operacion is not None
+            and valor is not None
+            and operacion not in OPERACIONES_CON_PAPELERA
+        ):
+            raise ValueError("solo aplica a las operaciones 'borrar' o 'dedup'")
         return valor
 
     @field_validator("destino")

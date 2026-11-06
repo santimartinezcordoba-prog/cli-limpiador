@@ -29,7 +29,7 @@ def test_ayuda_enumera_todas_las_ordenes(runner: CliRunner) -> None:
     # La ayuda general siempre debe funcionar.
     assert resultado.exit_code == 0
     # Todas las órdenes obligatorias aparecen en la ayuda.
-    for orden in ("version", "listar", "acciones", "validar", "ejecutar"):
+    for orden in ("version", "listar", "acciones", "validar", "ejecutar", "deshacer"):
         assert orden in salida, f"la orden '{orden}' no aparece en --help"
     # La opción global --config también debe documentarse.
     assert "--config" in salida
