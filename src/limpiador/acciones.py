@@ -3,14 +3,27 @@
 La planificación es pura: `planificar` solo mira el disco, no lo modifica.
 `ejecutar` es la única función que escribe, y siempre dentro de la carpeta
 objetivo, sin seguir enlaces simbólicos y sin borrar nunca la carpeta raíz.
+
+Con la papelera activada, «borrar» se convierte en «mover a la papelera» y
+cada ejecución real deja un manifiesto reversible en `<papelera>/.manifiesto/`
+(ver `limpiador.papelera`).
 """
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from limpiador.config import Accion, Config
+from limpiador.papelera import (
+    EntradaManifiesto,
+    base_papelera,
+    escribir_manifiesto,
+    nueva_marca_temporal,
+    nuevo_op_id,
+)
 
 
 class AccionError(Exception):
@@ -27,9 +40,15 @@ class Operacion:
 
     @property
     def descripcion(self) -> str:
-        if self.tipo == "borrar":
+        if self.tipo == "borrar" and self.destino is None:
             return f"borrar {self.origen.name}"
         assert self.destino is not None
+        if self.tipo in {"borrar", "dedup"}:  # destino dentro de la papelera
+            ruta = "/".join(
+                (self.destino.parent.parent.name, self.destino.parent.name, self.destino.name)
+            )
+            etiqueta = "borrar (papelera)" if self.tipo == "borrar" else "dedup (papelera)"
+            return f"{etiqueta} {self.origen.name} -> {ruta}"
         carpeta = self.destino.parent.name
         return f"{self.tipo} {self.origen.name} -> {carpeta}/{self.destino.name}"
 
@@ -111,13 +130,50 @@ def _ficheros_que_coinciden(accion: Accion, raiz: Path) -> list[Path]:
     return sorted(encontrados)
 
 
+def _operaciones_a_papelera(
+    tipo: str, origenes: list[Path], papelera_dir: Path
+) -> list[Operacion]:
+    """Plan de movimientos a `<papelera>/<marca-temporal>/` sin colisiones."""
+    plan: list[Operacion] = []
+    simulados: set[Path] = set()
+    for origen in origenes:
+        candidato = papelera_dir / origen.name
+        if candidato.exists() or candidato in simulados:
+            candidato = _destino_libre_simulado(candidato, simulados)
+        simulados.add(candidato)
+        plan.append(Operacion(tipo, origen, candidato))
+    return plan
+
+
+def _duplicados_sobrantes(objetivos: list[Path]) -> list[Path]:
+    """De cada grupo de ficheros con el mismo SHA256, todos menos el primero."""
+    grupos: dict[bytes, list[Path]] = {}
+    for fichero in objetivos:
+        try:
+            digest = hashlib.sha256(fichero.read_bytes()).digest()
+        except OSError as exc:
+            raise AccionError(f"no se pudo leer '{fichero.name}' para dedup: {exc}") from exc
+        grupos.setdefault(digest, []).append(fichero)
+    sobrantes = [fichero for lista in grupos.values() for fichero in lista[1:]]
+    return sorted(sobrantes)
+
+
 def planificar(accion: Accion, carpeta: Path) -> list[Operacion]:
     """Calcula qué haría la acción sin tocar nada (modo `--simular`)."""
     raiz = _comprobar_carpeta(carpeta)
     objetivos = _ficheros_que_coinciden(accion, raiz)
 
     if accion.operacion == "borrar":
+        if accion.papelera:
+            papelera_dir = base_papelera(accion, raiz) / nueva_marca_temporal()
+            return _operaciones_a_papelera("borrar", objetivos, papelera_dir)
         return [Operacion("borrar", origen) for origen in objetivos]
+
+    if accion.operacion == "dedup":
+        # dedup es siempre reversible: los duplicados van a la papelera.
+        papelera_dir = base_papelera(accion, raiz) / nueva_marca_temporal()
+        sobrantes = _duplicados_sobrantes(objetivos)
+        return _operaciones_a_papelera("dedup", sobrantes, papelera_dir)
 
     if accion.operacion == "mover":
         assert accion.destino is not None  # garantizado por la validación
@@ -157,22 +213,42 @@ def _destino_libre_simulado(destino: Path, ya_planificados: set[Path]) -> Path:
     raise AccionError(f"demasiadas colisiones de nombre para '{destino.name}'")
 
 
-def ejecutar(accion: Accion, carpeta: Path, plan: list[Operacion]) -> list[str]:
-    """Aplica el plan calculado por `planificar`. Devuelve líneas de progreso.
+def ejecutar(
+    accion: Accion, carpeta: Path, plan: list[Operacion]
+) -> tuple[list[str], Path | None]:
+    """Aplica el plan calculado por `planificar`.
 
-    Lanza `AccionError` si alguna operación no es segura (fuera de la raíz).
+    Devuelve (bitácora, ruta_del_manifiesto). El manifiesto se escribe en
+    `<papelera>/.manifiesto/<op-id>.json` en cada ejecución real (`--si`) y
+    permite revertirla con `limpiador deshacer`. Lanza `AccionError` si alguna
+    operación no es segura (fuera de la raíz).
     """
     raiz = _comprobar_carpeta(carpeta)
+    papelera_base = base_papelera(accion, raiz)
     bitacora: list[str] = []
+    entradas: list[EntradaManifiesto] = []
     for operacion in plan:
         if not _esta_dentro(operacion.origen, raiz):
             raise AccionError(f"'{operacion.origen}' queda fuera de '{raiz}'")
         if operacion.destino is not None and not _esta_dentro(operacion.destino, raiz):
             raise AccionError(f"el destino '{operacion.destino}' queda fuera de '{raiz}'")
 
-        if operacion.tipo == "borrar":
+        if operacion.tipo == "borrar" and operacion.destino is None:
             operacion.origen.unlink()
             bitacora.append(f"borrado {operacion.origen.name}")
+            entradas.append(EntradaManifiesto(operacion.origen, None))
+        elif operacion.tipo in {"borrar", "dedup"}:
+            # Borrar con papelera / dedup: mover en vez de destruir.
+            assert operacion.destino is not None
+            operacion.destino.parent.mkdir(parents=True, exist_ok=True)
+            destino_final = _destino_libre(operacion.destino)
+            operacion.origen.replace(destino_final)
+            etiqueta = "a papelera" if operacion.tipo == "borrar" else "duplicado a papelera"
+            bitacora.append(
+                f"{operacion.origen.name} {etiqueta} -> "
+                f"{destino_final.parent.name}/{destino_final.name}"
+            )
+            entradas.append(EntradaManifiesto(operacion.origen, destino_final))
         elif operacion.tipo == "mover":
             assert operacion.destino is not None
             operacion.destino.parent.mkdir(parents=True, exist_ok=True)
@@ -182,11 +258,25 @@ def ejecutar(accion: Accion, carpeta: Path, plan: list[Operacion]) -> list[str]:
                 f"movido {operacion.origen.name} -> "
                 f"{destino_final.parent.name}/{destino_final.name}"
             )
+            entradas.append(EntradaManifiesto(operacion.origen, destino_final))
         elif operacion.tipo == "renombrar":
             assert operacion.destino is not None
             destino_final = _destino_libre(operacion.destino)
             operacion.origen.replace(destino_final)
             bitacora.append(f"renombrado {operacion.origen.name} -> {destino_final.name}")
+            entradas.append(EntradaManifiesto(operacion.origen, destino_final))
         else:  # pragma: no cover - imposible tras la validación
             raise AccionError(f"operación desconocida: {operacion.tipo}")
-    return bitacora
+
+    if not entradas:
+        return bitacora, None
+    manifiesto = escribir_manifiesto(
+        papelera_base=papelera_base,
+        op_id=nuevo_op_id(nueva_marca_temporal()),
+        accion=accion.nombre,
+        operacion=accion.operacion,
+        carpeta_base=raiz,
+        entradas=entradas,
+        timestamp=datetime.now().isoformat(timespec="seconds"),
+    )
+    return bitacora, manifiesto
