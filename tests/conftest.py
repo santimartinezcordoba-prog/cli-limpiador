@@ -6,7 +6,9 @@ REGLA DE ORO: ningún test toca ficheros reales. Todo se crea dentro de
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -154,3 +156,30 @@ def instantanea(raiz: Path) -> dict[str, str]:
         else:
             estado[clave] = ruta.read_bytes().hex()
     return estado
+
+
+def tree_hash(dir_path: Path) -> str:
+    """SHA256 estable del ÁRBOL completo: rutas relativas + contenido.
+
+    Codifica cada entrada con un tipo (F fichero, D carpeta, L enlace), su
+    ruta relativa y, en ficheros, sus bytes. Itera en orden estable
+    (partes de la ruta), así que dos llamadas sobre el mismo árbol dan el
+    mismo hash y cualquier cambio —contenido, renombrado, borrado, fichero
+    nuevo— lo cambia. Es la prueba empítrica de que `--simular` no toca disco.
+    """
+
+    def clave(ruta: Path) -> tuple[str, ...]:
+        return ruta.relative_to(dir_path).parts
+
+    hashero = hashlib.sha256()
+    for ruta in sorted(dir_path.rglob("*"), key=clave):
+        rel = "/".join(clave(ruta))
+        if ruta.is_symlink():
+            hashero.update(f"L {rel} -> {os.readlink(ruta)}\n".encode())
+        elif ruta.is_dir():
+            hashero.update(f"D {rel}\n".encode())
+        else:
+            hashero.update(f"F {rel} {ruta.stat().st_size}\n".encode())
+            hashero.update(ruta.read_bytes())
+            hashero.update(b"\n")
+    return hashero.hexdigest()
