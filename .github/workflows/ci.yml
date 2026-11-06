@@ -50,10 +50,15 @@ jobs:
       - name: Pruebas (pytest)
         run: uv run --no-sync pytest -ra
 
-  instalacion:
-    name: Instalación global + smoke test
+  # Simula EXACTAMENTE lo que haría otra persona (p. ej. el profesor) siguiendo
+  # el README: instalar la CLI en un entorno limpio y usarla desde el PATH.
+  install-smoke:
+    name: Instalación limpia (uv tool install + smoke)
     runs-on: ubuntu-latest
-    needs: calidad
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -64,15 +69,71 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/pyproject.toml"
 
-      # Comprueba que la CLI se instala como comando global igual que haría un
-      # usuario con `uv tool install git+https://.../cli-limpiador.git`.
-      - name: Instalar la CLI como herramienta global (uv tool install)
-        run: uv tool install .
+      - name: Configurar Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
-      # Smoke test: el comando debe estar en el PATH y responder.
-      - name: Smoke test (limpiador version)
+      # `uv tool install .` crea un venv aislado como haría un usuario final;
+      # si uv faltara por cualquier motivo, se cae a `pipx install .`.
+      - name: Instalar la CLI como herramienta global (uv tool install)
         run: |
-          export PATH="$HOME/.local/bin:$PATH"
-          which limpiador
-          limpiador version
-          limpiador --help
+          set -euo pipefail
+          if command -v uv >/dev/null 2>&1; then
+            uv tool install .
+          else
+            pipx install .
+          fi
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Smoke — limpiador version imprime la versión
+        run: limpiador version | grep -E "limpiador [0-9]+\.[0-9]+"
+
+      - name: Smoke — limpiador doctor sale 0
+        run: limpiador doctor
+
+      # La ayuda debe listar TODAS las órdenes, incluidas las nuevas
+      # `deshacer` (papelera) y `doctor` (instalación limpia).
+      - name: Smoke — limpiador --help lista todas las órdenes
+        run: |
+          set -euo pipefail
+          AYUDA="$(limpiador --help)"
+          echo "$AYUDA"
+          for orden in version listar acciones validar ejecutar deshacer doctor; do
+            echo "$AYUDA" | grep -q "$orden" || {
+              echo "FALTA la orden '$orden' en --help"; exit 1;
+            }
+          done
+
+  # La suite de pytest también en los tres sistemas operativos: la CLI se
+  # distribuye para que cualquiera la use, no solo en Linux.
+  os-matrix:
+    name: Pruebas en ${{ matrix.os }} (Python 3.12)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar proyecto + dependencias de desarrollo
+        run: uv venv --python "3.12" && uv pip install -e ".[dev]"
+        shell: bash
+
+      - name: Pruebas (pytest)
+        run: uv run --no-sync pytest -ra
+        shell: bash
