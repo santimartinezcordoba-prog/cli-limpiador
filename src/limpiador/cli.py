@@ -9,6 +9,7 @@ Códigos de salida:
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from typing import Annotated, Final
@@ -129,10 +130,47 @@ def acciones(ctx: typer.Context) -> None:
 
 
 @app.command()
-def validar(ctx: typer.Context) -> None:
+def validar(
+    ctx: typer.Context,
+    salida_json: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Emite el resultado como JSON estructurado (para scripts).",
+        ),
+    ] = False,
+) -> None:
     """Comprueba el fichero de acciones. Sale con 3 si es inválido."""
     ruta = Path(ctx.obj)
-    config = _cargar_config_o_salir(ruta)
+    try:
+        config = cargar_config(ruta)
+    except ConfigInvalidaError as exc:
+        if salida_json:
+            typer.echo(
+                json.dumps(
+                    {"valido": False, "archivo": str(ruta), "errores": exc.errores},
+                    ensure_ascii=False,
+                )
+            )
+            raise typer.Exit(EXIT_CONFIG_INVALIDA) from exc
+        console.print(f"[bold red]El fichero '{ruta}' no es válido:[/]")
+        for error in exc.errores:
+            console.print(f"  [red]✗[/] {error}")
+        raise typer.Exit(EXIT_CONFIG_INVALIDA) from exc
+    if salida_json:
+        typer.echo(
+            json.dumps(
+                {
+                    "valido": True,
+                    "archivo": str(ruta),
+                    "config_version": config.version,
+                    "acciones": len(config.acciones),
+                    "errores": [],
+                },
+                ensure_ascii=False,
+            )
+        )
+        return
     console.print(
         f"[bold green]✓ '{ruta}' es válido[/] "
         f"(config v{config.version}, {len(config.acciones)} acción(es))."

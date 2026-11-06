@@ -1,19 +1,35 @@
-"""Carga y validación del fichero de acciones (`acciones.json`).
+"""Carga y validación del fichero de acciones (`acciones.json`) con pydantic.
 
 Toda la validación se hace «en seco»: nunca se toca el disco más allá de
-leer el propio JSON. Los errores se acumulan en una lista con rutas exactas
-del estilo ``acciones[0].nombre: campo requerido``.
+leer el propio JSON. Los modelos `Accion` y `Config` de pydantic comprueban
+tipos, campos obligatorios y coherencia entre campos; los errores se mapean a
+mensajes propios con la ruta exacta del campo, del estilo
+``acciones[0].nombre: campo requerido``, y se acumulan TODOS de golpe (no
+solo el primero).
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 
-OPERACIONES_VALIDAS: Final[frozenset[str]] = frozenset({"mover", "borrar", "renombrar"})
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+)
 
+# Whitlist de operaciones ejecutables. El orden importa: se muestra tal cual
+# en el mensaje «valor no soportado (permitido: mover, borrar, ...)».
+OPERACIONES_VALIDAS: Final[tuple[str, ...]] = ("mover", "borrar", "renombrar", "dedup")
+
+LISTA_OPERACIONES: Final[str] = ", ".join(OPERACIONES_VALIDAS)
+
+# Campos admitidos en cada acción (los extra se rechazan con extra="forbid").
 CAMPOS_ACEPTADOS: Final[frozenset[str]] = frozenset(
     {"nombre", "descripcion", "operacion", "patrones", "destino", "sufijo"}
 )
@@ -25,26 +41,6 @@ class ConfigInvalidaError(Exception):
     def __init__(self, errores: list[str]) -> None:
         self.errores = errores
         super().__init__("; ".join(errores))
-
-
-@dataclass(frozen=True)
-class Accion:
-    """Una acción ya validada, lista para ejecutarse."""
-
-    nombre: str
-    descripcion: str
-    operacion: str
-    patrones: tuple[str, ...]
-    destino: str | None = None
-    sufijo: str | None = None
-
-
-@dataclass
-class Config:
-    """Configuración completa del fichero de acciones."""
-
-    version: int
-    acciones: list[Accion] = field(default_factory=list)
 
 
 def es_ruta_segura(valor: str) -> bool:
@@ -64,137 +60,182 @@ def es_patron_seguro(patron: str) -> bool:
     return es_ruta_segura(patron)
 
 
-def _texto_requerido(
-    datos: dict[str, Any], clave: str, prefijo: str, errores: list[str]
-) -> str | None:
-    """Devuelve el texto de `clave` o registra el error correspondiente."""
-    valor = datos.get(clave)
-    if valor is None:
-        errores.append(f"{prefijo}.{clave}: campo requerido")
-        return None
-    if not isinstance(valor, str) or not valor.strip():
-        errores.append(f"{prefijo}.{clave}: debe ser un texto no vacío")
-        return None
-    return valor.strip()
+class Accion(BaseModel):
+    """Una acción ya validada, lista para ejecutarse.
 
-
-def _validar_accion(indice: int, datos: Any, errores: list[str]) -> Accion | None:
-    """Valida una acción suelta; añade cada fallo a `errores`.
-
-    Devuelve la `Accion` construida solo si esta acción no tiene ningún error.
+    `validate_default=True` hace que los validadores de `destino` y `sufijo`
+    se ejecuten también cuando el campo brilla por su ausencia: así pueden
+    exigir «destino obligatorio si operacion=mover» con el mensaje exacto.
     """
-    prefijo = f"acciones[{indice}]"
-    if not isinstance(datos, dict):
-        errores.append(f"{prefijo}: debe ser un objeto JSON")
-        return None
 
-    for clave_ajena in sorted(set(datos) - CAMPOS_ACEPTADOS):
-        errores.append(f"{prefijo}.{clave_ajena}: campo no permitido")
-
-    nombre = _texto_requerido(datos, "nombre", prefijo, errores)
-    descripcion = _texto_requerido(datos, "descripcion", prefijo, errores)
-
-    operacion = datos.get("operacion")
-    if operacion is None:
-        errores.append(f"{prefijo}.operacion: campo requerido")
-        operacion = None
-    elif not isinstance(operacion, str) or operacion not in OPERACIONES_VALIDAS:
-        errores.append(f"{prefijo}.operacion: valor no soportado")
-        operacion = None
-
-    patrones = datos.get("patrones")
-    patrones_ok: tuple[str, ...] = ()
-    if patrones is None:
-        errores.append(f"{prefijo}.patrones: campo requerido")
-    elif not isinstance(patrones, list) or not patrones:
-        errores.append(f"{prefijo}.patrones: debe ser una lista con al menos un patrón")
-    else:
-        invalidos = [
-            f"{prefijo}.patrones[{i}]: patrón inválido o no seguro"
-            for i, p in enumerate(patrones)
-            if not isinstance(p, str) or not es_patron_seguro(p)
-        ]
-        errores.extend(invalidos)
-        if not invalidos:
-            patrones_ok = tuple(p for p in patrones if isinstance(p, str))
-
-    destino = datos.get("destino")
-    destino_ok: str | None = None
-    if operacion == "mover":
-        if destino is None:
-            errores.append(f"{prefijo}.destino: campo requerido")
-        elif not isinstance(destino, str) or not es_ruta_segura(destino):
-            errores.append(f"{prefijo}.destino: debe ser una ruta relativa segura")
-        else:
-            destino_ok = destino
-    elif destino is not None:
-        errores.append(f"{prefijo}.destino: solo aplica a la operación 'mover'")
-
-    sufijo = datos.get("sufijo")
-    sufijo_ok: str | None = None
-    if operacion == "renombrar":
-        if sufijo is None:
-            errores.append(f"{prefijo}.sufijo: campo requerido")
-        elif not isinstance(sufijo, str) or not sufijo.strip():
-            errores.append(f"{prefijo}.sufijo: debe ser un texto no vacío")
-        elif "/" in sufijo or "\\" in sufijo or ".." in sufijo:
-            errores.append(f"{prefijo}.sufijo: no puede contener rutas")
-        else:
-            sufijo_ok = sufijo.strip()
-    elif sufijo is not None:
-        errores.append(f"{prefijo}.sufijo: solo aplica a la operación 'renombrar'")
-
-    if errores or nombre is None or descripcion is None or operacion is None or not patrones_ok:
-        return None
-    return Accion(
-        nombre=nombre,
-        descripcion=descripcion,
-        operacion=operacion,
-        patrones=patrones_ok,
-        destino=destino_ok,
-        sufijo=sufijo_ok,
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        validate_default=True,
+        str_strip_whitespace=True,
     )
+
+    nombre: str = Field(min_length=1)
+    descripcion: str = Field(min_length=1)
+    operacion: str
+    patrones: tuple[str, ...] = Field(min_length=1)
+    destino: str | None = None
+    sufijo: str | None = Field(default=None, min_length=1)
+
+    @field_validator("operacion")
+    @classmethod
+    def _operacion_en_whitelist(cls, valor: str) -> str:
+        if valor not in OPERACIONES_VALIDAS:
+            raise ValueError(f"valor no soportado (permitido: {LISTA_OPERACIONES})")
+        return valor
+
+    @field_validator("destino")
+    @classmethod
+    def _destino_coherente(cls, valor: str | None, info: ValidationInfo) -> str | None:
+        operacion = info.data.get("operacion")
+        if operacion is None:
+            return valor  # 'operacion' ya ha fallado: no duplicamos culpas.
+        if operacion == "mover":
+            if valor is None:
+                raise ValueError(
+                    "campo requerido ('destino' es obligatorio "
+                    "cuando operacion='mover')"
+                )
+            if not es_ruta_segura(valor):
+                raise ValueError("debe ser una ruta relativa segura")
+        elif valor is not None:
+            raise ValueError("solo aplica a la operación 'mover'")
+        return valor
+
+    @field_validator("sufijo")
+    @classmethod
+    def _sufijo_coherente(cls, valor: str | None, info: ValidationInfo) -> str | None:
+        operacion = info.data.get("operacion")
+        if operacion is None:
+            return valor
+        if operacion == "renombrar":
+            if valor is None:
+                raise ValueError(
+                    "campo requerido ('sufijo' es obligatorio "
+                    "cuando operacion='renombrar')"
+                )
+            if "/" in valor or "\\" in valor or ".." in valor:
+                raise ValueError("no puede contener rutas")
+        elif valor is not None:
+            raise ValueError("solo aplica a la operación 'renombrar'")
+        return valor
+
+
+class Config(BaseModel):
+    """Configuración completa del fichero de acciones."""
+
+    version: int = Field(default=1, strict=True)
+    acciones: list[Accion] = Field(min_length=1)
+
+
+def _ruta_legible(loc: tuple[Any, ...]) -> str:
+    """Convierte la localización de un error de pydantic en texto propio.
+
+    ``(0, 'nombre')`` -> ``[0].nombre``; los enteros se pintan como índice.
+    """
+    texto = ""
+    for parte in loc:
+        if isinstance(parte, int):
+            texto += f"[{parte}]"
+        else:
+            texto += f".{parte}" if texto else str(parte)
+    return texto
+
+
+def _prefijo(loc: tuple[Any, ...]) -> str:
+    """Prefijo legible de un error: ``acciones[0].nombre`` o ``<raíz>.version``."""
+    if not loc:
+        return "<raíz>"
+    if loc[0] == "acciones":
+        if len(loc) == 1:
+            return "<raíz>.acciones"
+        return "acciones" + _ruta_legible(loc[1:])
+    return f"<raíz>.{_ruta_legible(loc)}"
+
+
+def _mensaje_de_error(loc: tuple[Any, ...], tipo: str, msg: str) -> str:
+    """Traduce un error de pydantic al mensaje en español del proyecto."""
+    campo = next((p for p in reversed(loc) if isinstance(p, str)), "")
+    dentro_de_patrones = campo == "patrones" and bool(loc) and isinstance(loc[-1], int)
+    if tipo == "missing":
+        return "campo requerido"
+    if tipo == "extra_forbidden":
+        return "campo no permitido"
+    if tipo == "model_attributes_type":
+        return "debe ser un objeto JSON"
+    if campo == "operacion" and tipo in {"string_type", "string_too_short"}:
+        return f"valor no soportado (permitido: {LISTA_OPERACIONES})"
+    if dentro_de_patrones and tipo in {"string_type", "string_too_short"}:
+        return "patrón inválido o no seguro"
+    if campo == "patrones" and tipo == "list_type":
+        return "debe ser una lista con al menos un patrón"
+    if tipo == "too_short":
+        if campo == "acciones":
+            return "debe ser una lista con al menos una acción"
+        if campo == "patrones":
+            return "debe ser una lista con al menos un patrón"
+        return "debe ser un texto no vacío"
+    if tipo == "int_type":
+        return "debe ser un entero"
+    if tipo == "value_error":
+        return msg.removeprefix("Value error, ")
+    if tipo in {"string_type", "string_too_short", "list_type"}:
+        return "debe ser un texto no vacío"
+    return "valor inválido"
+
+
+def _chequeos_de_contenido(datos: dict[str, Any]) -> list[str]:
+    """Comprobaciones que pydantic no hace: seguridad de patrones y duplicados.
+
+    Se ejecutan sobre el JSON crudo para poder reportar también los fallos de
+    las acciones que ya tengan otros errores.
+    """
+    errores: list[str] = []
+    lista = datos.get("acciones")
+    if not isinstance(lista, list):
+        return errores
+    nombres_vistos: set[str] = set()
+    for i, item in enumerate(lista):
+        if not isinstance(item, dict):
+            continue
+        patrones = item.get("patrones")
+        if isinstance(patrones, list):
+            for j, patron in enumerate(patrones):
+                if isinstance(patron, str) and not es_patron_seguro(patron):
+                    errores.append(f"acciones[{i}].patrones[{j}]: patrón inválido o no seguro")
+        nombre = item.get("nombre")
+        if isinstance(nombre, str):
+            if nombre in nombres_vistos:
+                errores.append(f"acciones[{i}].nombre: nombre duplicado '{nombre}'")
+            nombres_vistos.add(nombre)
+    return errores
 
 
 def validar_contenido(datos: Any) -> Config:
     """Valida el JSON ya parseado y lanza `ConfigInvalidaError` si algo falla."""
-    errores: list[str] = []
-
     if not isinstance(datos, dict):
         raise ConfigInvalidaError(["<raíz>: el fichero debe ser un objeto JSON"])
 
-    version = datos.get("version", 1)
-    if not isinstance(version, int) or isinstance(version, bool):
-        errores.append("<raíz>.version: debe ser un entero")
-        version = 1
+    try:
+        config = Config.model_validate(datos)
+        errores: list[str] = []
+    except ValidationError as exc:
+        config = None
+        errores = [
+            f"{_prefijo(err['loc'])}: {_mensaje_de_error(err['loc'], err['type'], err['msg'])}"
+            for err in exc.errors()
+        ]
 
-    if "acciones" not in datos:
-        errores.append("<raíz>.acciones: campo requerido")
-        raise ConfigInvalidaError(errores)
-
-    lista = datos["acciones"]
-    if not isinstance(lista, list) or not lista:
-        raise ConfigInvalidaError(
-            ["<raíz>.acciones: debe ser una lista con al menos una acción"]
-        )
-
-    acciones: list[Accion] = []
-    nombres_vistos: set[str] = set()
-    for i, item in enumerate(lista):
-        # Cada acción se valida con su propia lista de errores para poder
-        # seguir comprobando el resto y reportar todos los fallos a la vez.
-        errores_accion: list[str] = []
-        accion = _validar_accion(i, item, errores_accion)
-        errores.extend(errores_accion)
-        if accion is not None:
-            if accion.nombre in nombres_vistos:
-                errores.append(f"acciones[{i}].nombre: nombre duplicado '{accion.nombre}'")
-            nombres_vistos.add(accion.nombre)
-            acciones.append(accion)
-
+    errores += _chequeos_de_contenido(datos)
     if errores:
         raise ConfigInvalidaError(errores)
-    return Config(version=version, acciones=acciones)
+    assert config is not None  # sin errores => el modelo se construyó entero
+    return config
 
 
 def cargar_config(ruta: Path) -> Config:
@@ -212,7 +253,7 @@ def cargar_config(ruta: Path) -> Config:
     except json.JSONDecodeError as exc:
         raise ConfigInvalidaError(
             [
-                f"{ruta}: JSON mal formado en la línea {exc.lineno}, "
+                f"{ruta}: JSON inválido: mal formado en la línea {exc.lineno}, "
                 f"columna {exc.colno}: {exc.msg}"
             ]
         ) from exc
