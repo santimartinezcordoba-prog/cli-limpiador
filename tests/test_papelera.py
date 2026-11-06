@@ -63,11 +63,15 @@ def config_papelera(tmp_path: Path) -> Path:
 
 
 def _contenidos_papelera(papelera_base: Path) -> dict[str, bytes]:
-    """Todos los ficheros de la papelera (sin el .manifiesto) por ruta relativa."""
+    """Todos los ficheros de la papelera (sin el .manifiesto) por ruta relativa.
+
+    Se usa `as_posix()` para que las aserciones `endswith("/nombre")` valgan
+    igual en Linux, macOS y Windows (donde el separador nativo es `\\`).
+    """
     estado: dict[str, bytes] = {}
     for ruta in sorted(papelera_base.rglob("*")):
         if ruta.is_file() and ".manifiesto" not in ruta.parts:
-            estado[str(ruta.relative_to(papelera_base))] = ruta.read_bytes()
+            estado[ruta.relative_to(papelera_base).as_posix()] = ruta.read_bytes()
     return estado
 
 
