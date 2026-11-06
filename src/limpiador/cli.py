@@ -111,6 +111,44 @@ def version() -> None:
 
 
 @app.command()
+def doctor() -> None:
+    """Diagnóstico del entorno de instalación. Sale con 0 si todo es correcto.
+
+    Comprueba la versión de Python, las dependencias (typer, rich, pydantic)
+    y que la CLI está correctamente instalada. Es el `limpiador doctor` del
+    job `install-smoke` de CI: si sale 0, otra persona puede usar la CLI.
+    """
+    import importlib.metadata
+
+    comprobaciones: list[tuple[bool, str, str]] = []
+    version_py = sys.version.split()[0]
+    comprobaciones.append(
+        (sys.version_info >= (3, 10), "python", f"{version_py} (se requiere >= 3.10)")
+    )
+    for dependencia in ("typer", "rich", "pydantic"):
+        try:
+            comprobaciones.append(
+                (True, dependencia, importlib.metadata.version(dependencia))
+            )
+        except importlib.metadata.PackageNotFoundError:
+            comprobaciones.append((False, dependencia, "no instalada"))
+    try:
+        comprobaciones.append(
+            (True, "limpiador", importlib.metadata.version("limpiador"))
+        )
+    except importlib.metadata.PackageNotFoundError:
+        comprobaciones.append((False, "limpiador", "no instalada como paquete"))
+
+    for ok, nombre, detalle in comprobaciones:
+        simbolo = "green]✓" if ok else "red]✗"
+        console.print(f"[{simbolo}] {nombre}: {detalle}")
+    if not all(ok for ok, _, _ in comprobaciones):
+        console.print("[bold red]Entorno no apto para limpiador.[/]")
+        raise typer.Exit(EXIT_ERROR)
+    console.print("[bold green]Todo correcto: el entorno ejecuta limpiador.[/]")
+
+
+@app.command()
 def listar(
     ctx: typer.Context,
     carpeta: Annotated[

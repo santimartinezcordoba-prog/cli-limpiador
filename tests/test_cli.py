@@ -29,7 +29,15 @@ def test_ayuda_enumera_todas_las_ordenes(runner: CliRunner) -> None:
     # La ayuda general siempre debe funcionar.
     assert resultado.exit_code == 0
     # Todas las órdenes obligatorias aparecen en la ayuda.
-    for orden in ("version", "listar", "acciones", "validar", "ejecutar", "deshacer"):
+    for orden in (
+        "version",
+        "listar",
+        "acciones",
+        "validar",
+        "ejecutar",
+        "deshacer",
+        "doctor",
+    ):
         assert orden in salida, f"la orden '{orden}' no aparece en --help"
     # La opción global --config también debe documentarse.
     assert "--config" in salida
@@ -47,6 +55,19 @@ def test_version_muestra_la_version_instalada(runner: CliRunner) -> None:
 
     assert resultado.exit_code == 0
     assert __version__ in salida
+
+
+def test_doctor_checkea_el_entorno_y_sale_cero(runner: CliRunner) -> None:
+    """`limpiador doctor` audita Python y dependencias; con entorno sano sale 0."""
+    resultado = llamar(runner, ["doctor"])
+    salida = salida_normalizada(resultado.output)
+
+    assert resultado.exit_code == 0
+    assert "python" in salida
+    # Las tres dependencias críticas aparecen auditadas.
+    for dependencia in ("typer", "rich", "pydantic"):
+        assert dependencia in salida
+    assert "Todo correcto" in salida
 
 
 def test_listar_muestra_nombre_tipo_tamano_y_fecha(
