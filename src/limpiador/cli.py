@@ -2,7 +2,8 @@
 
 Códigos de salida:
 - 0: todo correcto.
-- 1: error de uso en tiempo de ejecución (acción o carpeta inexistente).
+- 1: error de uso en tiempo de ejecución (acción o carpeta inexistente,
+  o `deshacer` sin manifiesto / operación no reversible).
 - 2: falta confirmación (sin TTY y sin ``--si``) o flags incompatibles.
 - 3: el fichero de configuración no es válido.
 """
@@ -21,6 +22,11 @@ from limpiador import __version__
 from limpiador.acciones import AccionError, Operacion, buscar_accion, planificar
 from limpiador.acciones import ejecutar as ejecutar_plan
 from limpiador.config import Accion, Config, ConfigInvalidaError, cargar_config
+from limpiador.papelera import (
+    PapeleraError,
+    deshacer_operacion,
+    resolver_papelera_cli,
+)
 from limpiador.tabla import tabla_acciones, tabla_ficheros, tabla_operaciones
 
 EXIT_OK: Final = 0
@@ -229,7 +235,7 @@ def ejecutar_accion(
         _pedir_confirmacion_o_salir(nombre, carpeta, plan)
 
     try:
-        bitacora = ejecutar_plan(accion, carpeta, plan)
+        bitacora, ruta_manifiesto = ejecutar_plan(accion, carpeta, plan)
     except (AccionError, OSError) as exc:
         console.print(f"[red]✗ Error al ejecutar: {exc}[/]")
         raise typer.Exit(EXIT_ERROR) from exc
@@ -237,6 +243,53 @@ def ejecutar_accion(
     for linea in bitacora:
         console.print(f"  [green]✓[/] {linea}")
     console.print(f"[bold green]Acción '{nombre}' ejecutada.[/]")
+    if ruta_manifiesto is not None:
+        console.print(
+            f"[dim]Manifiesto: {ruta_manifiesto} — "
+            "puedes revertirlo con 'limpiador deshacer'.[/]"
+        )
+
+
+@app.command()
+def deshacer(
+    n: Annotated[
+        int,
+        typer.Argument(min=1, help="Cuántas ejecuciones saltar: 1 = la última."),
+    ] = 1,
+    carpeta: Annotated[
+        Path,
+        typer.Option("--carpeta", help="Carpeta donde se ejecutó la acción."),
+    ] = Path("."),
+    papelera: Annotated[
+        str | None,
+        typer.Option(
+            "--papelera",
+            help="Subcarpeta de papelera personalizada (por defecto 'papelera').",
+        ),
+    ] = None,
+) -> None:
+    """Revierte la última operación real registrada por la papelera.
+
+    Lee el manifiesto N-ésimo más reciente y mueve cada fichero de vuelta a
+    su ruta original. Si el original ya existe, no sobrescribe: crea
+    `nombre.restaurado.ext`. Sale con 1 si no hay nada que deshacer o la
+    operación no es reversible (contuvo borrados definitivos).
+    """
+    _resolver_carpeta_o_salir(carpeta)
+    try:
+        papelera_base = resolver_papelera_cli(carpeta.resolve(), papelera)
+        manifiesto, bitacora = deshacer_operacion(papelera_base, n)
+    except (PapeleraError, OSError) as exc:
+        console.print(f"[red]✗ No se puede deshacer: {exc}[/]")
+        raise typer.Exit(EXIT_ERROR) from exc
+
+    for linea in bitacora:
+        color = "yellow" if linea.startswith("AVISO") else "green"
+        console.print(f"  [{color}]✓[/] {linea}")
+    console.print(
+        f"[bold green]Deshecha la operación '{manifiesto.op_id}' "
+        f"de la acción '{manifiesto.accion}' ({manifiesto.timestamp}).[/]"
+    )
 
 
 def _pedir_confirmacion_o_salir(nombre: str, carpeta: Path, plan: list[Operacion]) -> None:
