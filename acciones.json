@@ -10,9 +10,10 @@
     },
     {
       "nombre": "borrar-temporales",
-      "descripcion": "Borra ficheros temporales .tmp",
+      "descripcion": "Borra ficheros temporales .tmp moviéndolos a la papelera (reversible)",
       "operacion": "borrar",
-      "patrones": ["*.tmp"]
+      "patrones": ["*.tmp"],
+      "papelera": true
     },
     {
       "nombre": "ordenar-documentos",

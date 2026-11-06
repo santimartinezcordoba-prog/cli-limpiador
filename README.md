@@ -4,12 +4,15 @@ CLI en Python para **limpiar y ordenar ficheros** de forma declarativa:
 defines qué hacer en un fichero JSON (`acciones.json`) y la herramienta lo
 ejecuta, con simulación previa y confirmaciones de seguridad.
 
-- Órdenes: `version`, `listar`, `acciones`, `validar`, `ejecutar`.
+- Órdenes: `version`, `doctor`, `listar`, `acciones`, `validar` (`--json`),
+  `ejecutar` (`--simular` / `--si`) y `deshacer`.
 - Stack: Python 3.10+, [Typer](https://typer.tiangolo.com/) (CLI),
-  [Rich](https://rich.readthedocs.io/) (tablas), pytest, ruff, mypy.
-- 100 % segura por diseño: `--simular` no toca el disco, sin terminal no
-  ejecuta nada, no sigue enlaces simbólicos y no escribe fuera de la carpeta
-  objetivo.
+  [Rich](https://rich.readthedocs.io/) (tablas), [pydantic](https://docs.pydantic.dev/)
+  (validación), pytest, ruff, mypy.
+- 100 % segura por diseño: `--simular` no toca el disco (probado con hash),
+  sin terminal no ejecuta nada, «borrar» puede ir a una **papelera reversible**
+  con `deshacer`, las operaciones están en whitelist y todo path traversal
+  (`..`) se rechaza.
 
 ## Requisitos
 
@@ -57,14 +60,22 @@ limpiador listar ./pruebas
 # Acciones definidas en ./acciones.json
 limpiador acciones
 
-# Validar la configuración (exit code 3 si es inválida)
+# Validar la configuración (exit code 3 si es inválida; lista TODOS los errores)
 limpiador validar
+limpiador validar --json   # lo mismo, como JSON estructurado para scripts
+
+# Diagnóstico del entorno (Python + dependencias): sale 0 si todo vale
+limpiador doctor
 
 # Simular: muestra qué haría, sin tocar nada
 limpiador ejecutar mover-imagenes ./pruebas --simular
 
 # Ejecutar de verdad sin preguntar (para scripts; usa antes --simular)
 limpiador ejecutar mover-imagenes ./pruebas --si
+
+# Deshacer: revierte la última ejecución real (1 = última, 2 = penúltima…)
+limpiador deshacer
+limpiador deshacer 2
 
 # Usar otro fichero de acciones (opción global --config)
 limpiador --config ./acciones-personales.json listar ./pruebas
@@ -84,14 +95,77 @@ Además: las acciones solo actúan sobre la carpeta indicada (nivel superior,
 no recursivo), rechazan patrones y destinos con `..` (path traversal), ignoran
 enlaces simbólicos y nunca sobrescriben ficheros (añaden sufijos `-1`, `-2`…).
 
+### Papelera y `deshacer` (borrado reversible)
+
+Una acción `borrar` o `dedup` puede activar la papelera:
+
+```json
+{ "nombre": "borrar-temporales", "operacion": "borrar", "patrones": ["*.tmp"], "papelera": true }
+```
+
+- `"papelera": true` → los ficheros se **mueven** a `<carpeta>/papelera/<YYYYMMDD-HHMMSS>/`
+  en vez de destruirse. `"papelera": "DIR"` usa `<carpeta>/DIR` (ruta relativa segura).
+- Cada ejecución real (`--si`) escribe un **manifiesto** en
+  `<papelera>/.manifiesto/<op-id>.json` con `op_id`, `timestamp`, `accion`,
+  `carpeta_base` y la lista `{origen, destino}` de cada fichero.
+- `limpiador deshacer [N]` lee el manifiesto más reciente (o el N-ésimo) y
+  devuelve cada fichero a su ruta original. Si el original ya existe, **no
+  sobrescribe**: crea `nombre.restaurado.ext` y avisa. Sin manifiesto o con
+  borrados definitivos (sin papelera): sale con código 1 explicándolo.
+
+Por qué esto hace «seguro» un borrado: mover es atómico y no destruye el
+contenido; el manifiesto convierte la papelera en un historial reversible.
+`borrar` sin papelera sigue existiendo, pero es el único caso no reversible
+(`deshacer` lo detecta y se niega).
+
 ### Códigos de salida
 
 | Código | Significado                                                   |
 | ------ | ------------------------------------------------------------- |
-| `0`    | Correcto (incluye simulación y cancelación voluntaria).       |
-| `1`    | Acción inexistente, carpeta inexistente o fallo al ejecutar.  |
+| `0`    | Correcto (incluye simulación, cancelación voluntaria y `deshacer` OK). |
+| `1`    | Acción/carpeta inexistente, fallo al ejecutar, o `deshacer` sin manifiesto / operación no reversible. |
 | `2`    | Falta confirmación (sin TTY y sin `--si`) o flags incompatibles. |
-| `3`    | `acciones.json` inválido.                                     |
+| `3`    | `acciones.json` inválido (con `validar --json`, errores estructurados). |
+
+### Seguridad: amenazas y mitigaciones
+
+| Amenaza | Mitigación | Test que lo prueba |
+| ------- | ---------- | ------------------ |
+| Borrado sorpresa por un patrón mal escrito | `--simular` obligatorio por cultura + confirmación `s/N`; sin TTY, exit 2 y nada se ejecuta | `test_simular_no_toca_disco_hash_identico`, `test_sin_tty_y_sin_si_se_niega_y_sale_2` |
+| Error humano ya ejecutado | Papelera + manifiesto reversible + `deshacer` (nunca sobrescribe: `.restaurado`) | `test_papelera_borrar_mueve_en_vez_de_borrar`, `test_deshacer_restaura_ruta_original`, `test_deshacer_no_sobrescribe_si_existe` |
+| Operaciones arbitrarias (chmod, exec…) | Whitelist pydantic: solo `mover`, `borrar`, `renombrar`, `dedup`; todo lo demás falla la validación con exit 3 | `test_validar_operacion_no_soportada` |
+| Path traversal / escapar de la carpeta (`../`, absolutas, `~`, enlaces) | `es_ruta_segura` en patrones/destinos/papelera + contención con `resolve()`; enlaces simbólicos se ignoran | `test_patron_con_path_traversal`, `test_destino_con_path_traversal`, `test_papelera_path_traversal_se_rechaza`, `test_no_sigue_enlaces_simbolicos_fuera_de_la_carpeta` |
+| Sobrescribir datos existentes | Colisiones → sufijos `-1`, `-2`…; al deshacer → `.restaurado` y aviso | `test_deshacer_no_sobrescribe_si_existe` |
+| Ficheros fuera de la carpeta objetivo | Planificación y ejecución rechazan cualquier ruta que, tras `resolve()`, quede fuera | `test_no_sigue_enlaces_simbolicos_fuera_de_la_carpeta` |
+
+### Auditoría de tests
+
+Cada fila dice qué comprueba un test y por qué ese test importa. Si alguna
+aserción fallara, la garantía correspondiente deja de ser cierta.
+
+| Test | Qué aserta | Por qué importa |
+| ---- | ---------- | --------------- |
+| `test_ayuda_enumera_todas_las_ordenes` | `--help` sale 0 y lista `version`, `listar`, `acciones`, `validar`, `ejecutar`, `deshacer`, `doctor` y `--config` | Sin ayuda completa nadie descubre la CLI; evita que un refactor «pierda» una orden. |
+| `test_version_muestra_la_version_instalada` | `version` imprime la versión del paquete instalado (metadatos) | Prueba de humo de instalación: lo instalado coincide con `pyproject.toml`. |
+| `test_listar_muestra_nombre_tipo_tamano_y_fecha` | La tabla tiene las 4 columnas y los ficheros de `tmp_path` | Contrato de salida legible de `listar`. |
+| `test_listar_no_modifica_nada` | Instantánea byte-a-byte idéntica tras listar | `listar` es solo lectura: no puede haber efectos secundarios. |
+| `test_validar_ok` | JSON correcto → salida 0 y «válido» | El camino feliz no puede dar falsos negativos. |
+| `test_validar_json_mal_formado` | JSON corrupto → exit 3 + «JSON inválido» con línea y columna | Un typo en el JSON debe detectarse, no ejecutarse «a medias». |
+| `test_validar_operacion_no_soportada` | exit 3 + `acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup)` | La whitelist se aplica al validar, con índice y campo exactos. |
+| `test_validar_mover_sin_destino` | exit 3 + `acciones[0].destino: campo requerido ('destino' es obligatorio cuando operacion='mover')` | Coherencia entre campos: un `mover` sin destino es una bomba de relojería. |
+| `test_validar_json_flag_con_errores` | `--json` devuelve TODOS los errores como array y sale 3 | Auditoría automatizable: un script puede exigir `valido: true`. |
+| `test_simular_no_toca_disco_hash_identico` (parametrizado por operación) | SHA256 del árbol (rutas+contenidos) idéntico antes/después de `--simular` + «simulación»/«no se ha modificado» en la salida | Prueba empírica estrella: `--simular` no escribe ni un byte. |
+| `test_si_mueve_las_imagenes_de_verdad` | `--si` mueve `foto.png`/`selfie.jpg` a `imagenes/` conservando el contenido | La ejecución real hace exactamente lo prometido en el plan. |
+| `test_sin_tty_y_sin_si_se_niega_y_sale_2` | Sin terminal y sin `--si`: exit 2, pide `--si` y no mueve nada | En cron/CI/pipes no puede haber destrucción silenciosa. |
+| `test_papelera_borrar_mueve_en_vez_de_borrar` | Con `papelera: true`, el `.tmp` aparece en `papelera/<ts>/` y se escribe el manifiesto | «Borrar» seguro = mover + mapa reversible. |
+| `test_deshacer_restaura_ruta_original` | Tras `--si` + `deshacer`, el fichero vuelve con su contenido | El botón de deshacer funciona de verdad. |
+| `test_deshacer_no_sobrescribe_si_existe` | El original nuevo queda intacto; lo recuperado acaba en `.restaurado` + AVISO | Deshacer nunca puede destruir datos posteriores. |
+| `test_deshacer_sin_manifiesto_sale_1` | Sin papelera → exit 1 con mensaje claro | El contrato de exit codes también es seguridad. |
+| `test_papelera_path_traversal_se_rechazada`* | `papelera: "../huida"` → exit 3 (campo exacto) | La papelera tampoco puede escribir fuera de la carpeta. |
+| `test_dedup_mueve_duplicados_a_papelera_y_deshacer_restaura` | Dedup SHA256 deja uno, archiva el duplicado y `deshacer` lo devuelve | La operación nueva también nace reversible. |
+| `test_accion_inexistente_muestra_error_y_alternativas` | exit 1 + lista de acciones válidas | Los errores enseñan a usar la herramienta. |
+
+\* En el código: `test_papelera_path_traversal_se_rechaza`.
 
 ### Ejemplo de salida (`listar`)
 
@@ -125,9 +199,10 @@ adáptalo. Estructura:
     },
     {
       "nombre": "borrar-temporales",
-      "descripcion": "Borra ficheros temporales .tmp",
+      "descripcion": "Borra ficheros temporales .tmp (a la papelera: reversible)",
       "operacion": "borrar",
-      "patrones": ["*.tmp"]
+      "patrones": ["*.tmp"],
+      "papelera": true
     },
     {
       "nombre": "renombrar-viejos",
@@ -146,18 +221,40 @@ Campos de cada acción:
 | ------------- | ------------------------- | --------------------------------------------- |
 | `nombre`      | todas                     | Identificador único (lo usas en `ejecutar`).  |
 | `descripcion` | todas                     | Texto que se muestra en `limpiador acciones`. |
-| `operacion`   | todas                     | `mover`, `borrar` o `renombrar`.              |
+| `operacion`   | todas                     | Whitelist: `mover`, `borrar`, `renombrar` o `dedup`. |
 | `patrones`    | todas                     | Comodines tipo `*.png` (solo nombres, sin rutas). |
 | `destino`     | `mover`                   | Carpeta relativa dentro de la carpeta objetivo. |
 | `sufijo`      | `renombrar`               | Se añade antes de la extensión: `a.txt` → `a-SUFIJO.txt`. |
+| `papelera`    | `borrar`/`dedup` (opcional) | `true` → `<carpeta>/papelera`; `"DIR"` → `<carpeta>/DIR`. |
 
-`limpiador validar` te dice **exactamente qué campo falla**, por ejemplo:
+`limpiador validar` te dice **exactamente qué campo falla** (índice y campo
+reales, todos de golpe), por ejemplo:
 
 ```text
 El fichero 'acciones.json' no es válido:
   ✗ acciones[0].nombre: campo requerido
-  ✗ acciones[1].operacion: valor no soportado
-  ✗ acciones[2].destino: debe ser una ruta relativa segura
+  ✗ acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup)
+  ✗ acciones[2].destino: campo requerido ('destino' es obligatorio cuando operacion='mover')
+```
+
+### Uso end-to-end (de cero a deshacer)
+
+```bash
+# 1) "init": copia el ejemplo del repo y activa la papelera en el borrado
+cp acciones.json ./mi-carpura/acciones.json
+#    (en "borrar-temporales" ya viene "papelera": true de serie)
+
+# 2) validar: la config debe pasar antes de tocar nada (exit 3 si no)
+limpiador --config ./mi-carpura/acciones.json validar
+
+# 3) simular: tabla de pasos SIN tocar el disco
+limpiador --config ./mi-carpura/acciones.json ejecutar borrar-temporales ./mi-carpura --simular
+
+# 4) ejecutar de verdad: los .tmp viajan a papelera/<marca>/ + manifiesto
+limpiador --config ./mi-carpura/acciones.json ejecutar borrar-temporales ./mi-carpura --si
+
+# 5) te has asustado: deshacer devuelve todo a su sitio
+cd ./mi-carpura && limpiador deshacer
 ```
 
 ## Ejecutar las pruebas
@@ -196,7 +293,10 @@ gh pr merge --squash                  # 4. merge a main (CI en verde)
 
 Ramas usadas: `feature/estructura-base`, `feature/cli-typer`,
 `feature/listar`, `feature/validar`, `feature/ejecutar`, `feature/pruebas`,
-`feature/github-actions`, `feature/release-v1`.
+`feature/github-actions`, `feature/release-v1` y, para la v1.1.0:
+`feature/validar-pydantic`, `feature/papelera-deshacer`,
+`feature/test-hash-simular`, `feature/ci-instalacion-limpia` y
+`feature/docs-auditoria`.
 
 ## Release
 
@@ -207,9 +307,9 @@ Ramas usadas: `feature/estructura-base`, `feature/cli-typer`,
 
 ```bash
 git checkout main && git pull
-git tag v1.0
-git push origin v1.0
-gh release create v1.0 --title "limpiador v1.0" --notes-file CHANGELOG.md
+git tag v1.1.0
+git push origin v1.1.0
+gh release create v1.1.0 --title "limpiador v1.1.0" --notes-file CHANGELOG.md
 ```
 
 ## Licencia
