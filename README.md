@@ -1,5 +1,10 @@
 # limpiador 🧹
 
+[![CI](https://github.com/santimartinezcordoba-prog/cli-limpiador/actions/workflows/ci.yml/badge.svg)](https://github.com/santimartinezcordoba-prog/cli-limpiador/actions/workflows/ci.yml)
+![cobertura](https://img.shields.io/badge/cobertura-80%25_gate-green)
+![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)
+![Release](https://img.shields.io/github/v/release/santimartinezcordoba-prog/cli-limpiador)
+
 CLI en Python para **limpiar y ordenar ficheros** de forma declarativa:
 defines qué hacer en un fichero JSON (`acciones.json`) y la herramienta lo
 ejecuta, con simulación previa y confirmaciones de seguridad.
@@ -149,6 +154,7 @@ aserción fallara, la garantía correspondiente deja de ser cierta.
 | `test_version_muestra_la_version_instalada` | `version` imprime la versión del paquete instalado (metadatos) | Prueba de humo de instalación: lo instalado coincide con `pyproject.toml`. |
 | `test_listar_muestra_nombre_tipo_tamano_y_fecha` | La tabla tiene las 4 columnas y los ficheros de `tmp_path` | Contrato de salida legible de `listar`. |
 | `test_listar_no_modifica_nada` | Instantánea byte-a-byte idéntica tras listar | `listar` es solo lectura: no puede haber efectos secundarios. |
+| `test_acciones_lista_todas_las_acciones_con_descripcion` | `acciones` imprime los 3 nombres del JSON y su descripción | El usuario ve lo que puede ejecutar antes de ejecutar nada. |
 | `test_validar_ok` | JSON correcto → salida 0 y «válido» | El camino feliz no puede dar falsos negativos. |
 | `test_validar_json_mal_formado` | JSON corrupto → exit 3 + «JSON inválido» con línea y columna | Un typo en el JSON debe detectarse, no ejecutarse «a medias». |
 | `test_validar_operacion_no_soportada` | exit 3 + `acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup)` | La whitelist se aplica al validar, con índice y campo exactos. |
@@ -157,6 +163,7 @@ aserción fallara, la garantía correspondiente deja de ser cierta.
 | `test_simular_no_toca_disco_hash_identico` (parametrizado por operación) | SHA256 del árbol (rutas+contenidos) idéntico antes/después de `--simular` + «simulación»/«no se ha modificado» en la salida | Prueba empírica estrella: `--simular` no escribe ni un byte. |
 | `test_si_mueve_las_imagenes_de_verdad` | `--si` mueve `foto.png`/`selfie.jpg` a `imagenes/` conservando el contenido | La ejecución real hace exactamente lo prometido en el plan. |
 | `test_sin_tty_y_sin_si_se_niega_y_sale_2` | Sin terminal y sin `--si`: exit 2, pide `--si` y no mueve nada | En cron/CI/pipes no puede haber destrucción silenciosa. |
+| `test_carpeta_inexistente_al_ejecutar` | `ejecutar` sobre carpeta que no existe → exit 1 + «no existe» | Caso feo: la ruta objetivo también se valida, no solo la acción. |
 | `test_papelera_borrar_mueve_en_vez_de_borrar` | Con `papelera: true`, el `.tmp` aparece en `papelera/<ts>/` y se escribe el manifiesto | «Borrar» seguro = mover + mapa reversible. |
 | `test_deshacer_restaura_ruta_original` | Tras `--si` + `deshacer`, el fichero vuelve con su contenido | El botón de deshacer funciona de verdad. |
 | `test_deshacer_no_sobrescribe_si_existe` | El original nuevo queda intacto; lo recuperado acaba en `.restaurado` + AVISO | Deshacer nunca puede destruir datos posteriores. |
@@ -278,9 +285,11 @@ pip install -e ".[dev]"
 pytest && ruff check && mypy
 ```
 
-## Proceso de desarrollo (ramas y PRs)
+## Cómo contribuir (ramas y PRs)
 
-Cada funcionalidad entra a `main` desde su rama con commits convencionales:
+Cada funcionalidad entra a `main` desde su rama, con commits convencionales
+(`feat:`, `fix:`, `test:`, `docs:`, `ci:`, `chore:`) y un PR cuyo checklist
+exige: **tests en verde · README actualizado · caso feo cubierto**:
 
 ```bash
 git checkout -b feature/listar        # 1. rama por funcionalidad
