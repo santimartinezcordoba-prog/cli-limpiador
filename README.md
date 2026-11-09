@@ -304,8 +304,10 @@ Ramas usadas: `feature/estructura-base`, `feature/cli-typer`,
 `feature/listar`, `feature/validar`, `feature/ejecutar`, `feature/pruebas`,
 `feature/github-actions`, `feature/release-v1` y, para la v1.1.0:
 `feature/validar-pydantic`, `feature/papelera-deshacer`,
-`feature/test-hash-simular`, `feature/ci-instalacion-limpia` y
-`feature/docs-auditoria`.
+`feature/test-hash-simular`, `feature/ci-instalacion-limpia`,
+`feature/docs-auditoria` y, para la v1.1.1: `feature/validar-mensajes-exactos`,
+`feature/cobertura-pytest`, `feature/ci-lint-test-smoke` y
+`feature/docs-readme-auditoria`.
 
 ## Release
 
@@ -316,9 +318,9 @@ Ramas usadas: `feature/estructura-base`, `feature/cli-typer`,
 
 ```bash
 git checkout main && git pull
-git tag v1.1.0
-git push origin v1.1.0
-gh release create v1.1.0 --title "limpiador v1.1.0" --notes-file CHANGELOG.md
+git tag v1.1.1
+git push origin v1.1.1
+gh release create v1.1.1 --title "limpiador v1.1.1" --notes-file CHANGELOG.md
 ```
 
 ## Licencia

@@ -7,6 +7,33 @@ y el proyecto admite [versionado semántico](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-09
+
+### Añadido
+
+- `pytest-cov` con umbral mínimo del 80 % (`--cov-fail-under=80` en
+  `addopts` + `[tool.coverage]`): la suite falla si la cobertura baja.
+- CI partida en los tres jobs del spec: `lint` (ruff + mypy), `test`
+  (matriz ubuntu/macos/windows × Python 3.11/3.12 + 3.10 en ubuntu, con
+  cobertura) e `install-smoke` (ubuntu + 3.12, entorno limpio:
+  `uv tool install .`, `version`, `--help`, `validar` con el
+  `acciones.json` de ejemplo, `doctor` y comprobación de que `--simular`
+  no escribe en disco).
+- Tests `test_validar_renombrar_sin_sufijo` y
+  `test_validar_destino_en_operacion_incompatible`.
+- README: badges de CI, cobertura (gate 80 %), Python y release; tabla de
+  auditoría completada con las filas de `acciones` y de
+  `ejecutar`-carpeta-inexistente; sección «Cómo contribuir» con el
+  checklist de PR.
+
+### Cambiado
+
+- `validar` emite las incoherencias operación↔campos a nivel de objeto
+  con el formato exacto de la rúbrica: `acciones[N]: 'destino' es
+  obligatorio cuando operacion='mover'` (y homólogos de `sufijo` y de
+  destino/sufijo en operaciones incompatibles). Se siguen listando TODOS
+  los errores de golpe con el índice real del array.
+
 ## [1.1.0] - 2026-11-06
 
 ### Añadido
@@ -82,7 +109,8 @@ y el proyecto admite [versionado semántico](https://semver.org/lang/es/).
 - CI con GitHub Actions (ruff, mypy, pytest, humo de instalación) en Python
   3.10, 3.11 y 3.12.
 
-[unreleased]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.1.0...HEAD
+[unreleased]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.0...v1.0.1
 [1.0.0]: https://github.com/santimartinezcordoba-prog/cli-limpiador/releases/tag/v1.0

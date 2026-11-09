@@ -1,6 +1,6 @@
 [project]
 name = "limpiador"
-version = "1.1.0"
+version = "1.1.1"
 description = "CLI para limpiar y ordenar ficheros mediante acciones declaradas en un JSON."
 readme = "README.md"
 license = { file = "LICENSE" }
