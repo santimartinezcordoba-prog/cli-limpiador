@@ -139,15 +139,30 @@ jobs:
       - name: Smoke — limpiador doctor sale 0
         run: limpiador doctor
 
+      # Hash del ÁRBOL COMPLETO (carpetas + ficheros), no solo ficheros:
+      # así se detectan también las carpetas «fantasma» que una planificación
+      # descuidada podría crear (p. ej. papelera/<marca>/ vacía al simular).
       - name: Smoke — --simular sobre una carpeta de prueba no escribe
         run: |
           set -euo pipefail
           mkdir -p /tmp/smoke-pruebas
           printf 'x' > /tmp/smoke-pruebas/foto.png
           printf 'x' > /tmp/smoke-pruebas/basura.tmp
-          ANTES=$(find /tmp/smoke-pruebas -type f -exec sha256sum {} + | sort | sha256sum)
+          hash_arbol() {
+            # Rutas relativas + tipo + contenido de todo el árbol, ordenadas:
+            # cualquier carpeta/fichero nuevo o cambiado altera el hash.
+            find "$1" | LC_ALL=C sort | while IFS= read -r ruta; do
+              if [ -d "$ruta" ]; then
+                printf 'D %s\n' "${ruta#"$1"}"
+              elif [ -f "$ruta" ]; then
+                printf 'F %s %s\n' "${ruta#"$1"}" "$(sha256sum < "$ruta")"
+              fi
+            done | sha256sum
+          }
+          ANTES=$(hash_arbol /tmp/smoke-pruebas)
           limpiador --config ./acciones.json ejecutar mover-imagenes /tmp/smoke-pruebas --simular
           limpiador --config ./acciones.json ejecutar borrar-temporales /tmp/smoke-pruebas --simular
-          DESPUES=$(find /tmp/smoke-pruebas -type f -exec sha256sum {} + | sort | sha256sum)
+          DESPUES=$(hash_arbol /tmp/smoke-pruebas)
           test "$ANTES" = "$DESPUES" || { echo "--simular TOCO el disco"; exit 1; }
           test -d /tmp/smoke-pruebas/imagenes && { echo "--simular creó carpetas"; exit 1; }
+          test -d /tmp/smoke-pruebas/papelera && { echo "--simular creó la papelera"; exit 1; }
