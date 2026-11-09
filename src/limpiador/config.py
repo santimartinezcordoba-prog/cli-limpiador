@@ -5,7 +5,9 @@ leer el propio JSON. Los modelos `Accion` y `Config` de pydantic comprueban
 tipos, campos obligatorios y coherencia entre campos; los errores se mapean a
 mensajes propios con la ruta exacta del campo, del estilo
 ``acciones[0].nombre: campo requerido``, y se acumulan TODOS de golpe (no
-solo el primero).
+solo el primero). Las incoherencias entre operación y campos dependientes se
+reportan a nivel de objeto con el formato exacto
+``acciones[2]: 'destino' es obligatorio cuando operacion='mover'``.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from pydantic import (
     ValidationError,
     ValidationInfo,
     field_validator,
+    model_validator,
 )
 
 # Whitlist de operaciones ejecutables. El orden importa: se muestra tal cual
@@ -115,39 +118,45 @@ class Accion(BaseModel):
 
     @field_validator("destino")
     @classmethod
-    def _destino_coherente(cls, valor: str | None, info: ValidationInfo) -> str | None:
-        operacion = info.data.get("operacion")
-        if operacion is None:
-            return valor  # 'operacion' ya ha fallado: no duplicamos culpas.
-        if operacion == "mover":
-            if valor is None:
-                raise ValueError(
-                    "campo requerido ('destino' es obligatorio "
-                    "cuando operacion='mover')"
-                )
-            if not es_ruta_segura(valor):
-                raise ValueError("debe ser una ruta relativa segura")
-        elif valor is not None:
-            raise ValueError("solo aplica a la operación 'mover'")
+    def _destino_seguro(cls, valor: str | None) -> str | None:
+        if valor is not None and not es_ruta_segura(valor):
+            raise ValueError("debe ser una ruta relativa segura")
         return valor
 
     @field_validator("sufijo")
     @classmethod
-    def _sufijo_coherente(cls, valor: str | None, info: ValidationInfo) -> str | None:
-        operacion = info.data.get("operacion")
-        if operacion is None:
-            return valor
-        if operacion == "renombrar":
-            if valor is None:
-                raise ValueError(
-                    "campo requerido ('sufijo' es obligatorio "
-                    "cuando operacion='renombrar')"
-                )
-            if "/" in valor or "\\" in valor or ".." in valor:
-                raise ValueError("no puede contener rutas")
-        elif valor is not None:
-            raise ValueError("solo aplica a la operación 'renombrar'")
+    def _sufijo_sin_rutas(cls, valor: str | None) -> str | None:
+        if valor is not None and ("/" in valor or "\\" in valor or ".." in valor):
+            raise ValueError("no puede contener rutas")
         return valor
+
+    @model_validator(mode="after")
+    def _coherencia_operacion_campos(self) -> Accion:
+        """Errores de coherencia entre `operacion` y sus campos dependientes.
+
+        Van a nivel de objeto (no de campo) para producir el formato exacto
+        exigido por la rúbrica, p. ej.::
+
+            acciones[2]: 'destino' es obligatorio cuando operacion='mover'
+
+        Si `operacion` ya falló, pydantic no ejecuta este validador: no se
+        duplican las culpas.
+        """
+        if self.operacion == "mover":
+            if self.destino is None:
+                raise ValueError(
+                    "'destino' es obligatorio cuando operacion='mover'"
+                )
+        elif self.destino is not None:
+            raise ValueError("'destino' solo aplica a la operación 'mover'")
+        if self.operacion == "renombrar":
+            if self.sufijo is None:
+                raise ValueError(
+                    "'sufijo' es obligatorio cuando operacion='renombrar'"
+                )
+        elif self.sufijo is not None:
+            raise ValueError("'sufijo' solo aplica a la operación 'renombrar'")
+        return self
 
 
 class Config(BaseModel):

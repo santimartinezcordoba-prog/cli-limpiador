@@ -234,7 +234,7 @@ reales, todos de golpe), por ejemplo:
 El fichero 'acciones.json' no es válido:
   ✗ acciones[0].nombre: campo requerido
   ✗ acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup)
-  ✗ acciones[2].destino: campo requerido ('destino' es obligatorio cuando operacion='mover')
+  ✗ acciones[2]: 'destino' es obligatorio cuando operacion='mover'
 ```
 
 ### Uso end-to-end (de cero a deshacer)

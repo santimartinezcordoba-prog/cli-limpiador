@@ -133,7 +133,12 @@ def test_dedup_es_operacion_valida(runner: CliRunner, tmp_path: Path) -> None:
 
 
 def test_validar_mover_sin_destino(runner: CliRunner, tmp_path: Path) -> None:
-    """La operación 'mover' exige 'destino'; sin él, error específico."""
+    """La operación 'mover' exige 'destino'; sin él, error específico.
+
+    El mensaje usa el formato EXACTO de la rúbrica: prefijo de objeto
+    (`acciones[N]:`) con el índice real del array y la frase
+    `'destino' es obligatorio cuando operacion='mover'`.
+    """
     datos = copy.deepcopy(CONFIG_VALIDA)
     del datos["acciones"][0]["destino"]
 
@@ -143,9 +148,36 @@ def test_validar_mover_sin_destino(runner: CliRunner, tmp_path: Path) -> None:
 
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
     assert (
-        "acciones[0].destino: campo requerido ('destino' es obligatorio "
-        "cuando operacion='mover')" in salida
+        "acciones[0]: 'destino' es obligatorio cuando operacion='mover'" in salida
     )
+
+
+def test_validar_renombrar_sin_sufijo(runner: CliRunner, tmp_path: Path) -> None:
+    """'renombrar' sin 'sufijo': mismo formato de error a nivel de objeto."""
+    datos = copy.deepcopy(CONFIG_VALIDA)
+    del datos["acciones"][3]["sufijo"]
+
+    resultado = llamar(runner, ["validar"], config=escribir_config(tmp_path, datos))
+
+    salida = salida_normalizada(resultado.output)
+
+    assert resultado.exit_code == EXIT_CONFIG_INVALIDA
+    assert (
+        "acciones[3]: 'sufijo' es obligatorio cuando operacion='renombrar'" in salida
+    )
+
+
+def test_validar_destino_en_operacion_incompatible(runner: CliRunner, tmp_path: Path) -> None:
+    """'destino' solo tiene sentido en 'mover': en 'borrar' se rechaza."""
+    datos = copy.deepcopy(CONFIG_VALIDA)
+    datos["acciones"][1]["destino"] = "algún-sitio"
+
+    resultado = llamar(runner, ["validar"], config=escribir_config(tmp_path, datos))
+
+    salida = salida_normalizada(resultado.output)
+
+    assert resultado.exit_code == EXIT_CONFIG_INVALIDA
+    assert "acciones[1]: 'destino' solo aplica a la operación 'mover'" in salida
 
 
 def test_accion_sin_patrones(runner: CliRunner, tmp_path: Path) -> None:
