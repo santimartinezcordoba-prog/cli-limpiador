@@ -11,14 +11,10 @@ permissions:
   contents: read
 
 jobs:
-  calidad:
-    name: Lint + tipos + pruebas (Python ${{ matrix.python-version }})
+  # Job 1 — calidad estática: ruff + mypy (ubuntu + Python 3.12).
+  lint:
+    name: Lint (ruff) + tipos (mypy)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,19 +23,17 @@ jobs:
         uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
-          # El proyecto no usa uv.lock (instalamos con uv venv + uv pip install),
-          # así que la clave de caché se calcula sobre pyproject.toml.
+          # El proyecto no usa uv.lock: la clave de caché se calcula sobre
+          # pyproject.toml.
           cache-dependency-glob: "**/pyproject.toml"
 
-      - name: Configurar Python ${{ matrix.python-version }}
+      - name: Configurar Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
 
-      # Instala la CLI en modo editable junto con las dependencias de desarrollo
-      # (pytest, ruff, mypy) definidas en [project.optional-dependencies].dev.
       - name: Instalar proyecto + dependencias de desarrollo
-        run: uv venv --python "${{ matrix.python-version }}" && uv pip install -e ".[dev]"
+        run: uv venv --python "3.12" && uv pip install -e ".[dev]"
 
       - name: Linting (ruff)
         run: uv run --no-sync ruff check
@@ -47,17 +41,20 @@ jobs:
       - name: Type checking (mypy)
         run: uv run --no-sync mypy
 
-      - name: Pruebas (pytest)
-        run: uv run --no-sync pytest -ra
-
-  # Simula EXACTAMENTE lo que haría otra persona (p. ej. el profesor) siguiendo
-  # el README: instalar la CLI en un entorno limpio y usarla desde el PATH.
-  install-smoke:
-    name: Instalación limpia (uv tool install + smoke)
-    runs-on: ubuntu-latest
+  # Job 2 — pytest con cobertura (umbral 80% fijado en pyproject.toml) en la
+  # matriz del enunciado: ubuntu/macos/windows × Python 3.11/3.12, más el
+  # 3.10 en ubuntu (versión mínima soportada).
+  test:
+    name: Pruebas (${{ matrix.os }} / Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.12"]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.10"
 
     steps:
       - name: Checkout
@@ -74,47 +71,22 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # `uv tool install .` crea un venv aislado como haría un usuario final;
-      # si uv faltara por cualquier motivo, se cae a `pipx install .`.
-      - name: Instalar la CLI como herramienta global (uv tool install)
-        run: |
-          set -euo pipefail
-          if command -v uv >/dev/null 2>&1; then
-            uv tool install .
-          else
-            pipx install .
-          fi
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Instalar proyecto + dependencias de desarrollo
+        run: uv venv --python "${{ matrix.python-version }}" && uv pip install -e ".[dev]"
+        shell: bash
 
-      - name: Smoke — limpiador version imprime la versión
-        run: limpiador version | grep -E "limpiador [0-9]+\.[0-9]+"
+      # `pytest -q` lleva en addopts --cov --cov-fail-under=80 (pyproject):
+      # si la cobertura baja del 80 %, este job falla.
+      - name: Pruebas con cobertura (pytest -q)
+        run: uv run --no-sync pytest -q
+        shell: bash
 
-      - name: Smoke — limpiador doctor sale 0
-        run: limpiador doctor
-
-      # La ayuda debe listar TODAS las órdenes, incluidas las nuevas
-      # `deshacer` (papelera) y `doctor` (instalación limpia).
-      - name: Smoke — limpiador --help lista todas las órdenes
-        run: |
-          set -euo pipefail
-          AYUDA="$(limpiador --help)"
-          echo "$AYUDA"
-          for orden in version listar acciones validar ejecutar deshacer doctor; do
-            echo "$AYUDA" | grep -q "$orden" || {
-              echo "FALTA la orden '$orden' en --help"; exit 1;
-            }
-          done
-
-  # La suite de pytest también en los tres sistemas operativos: la CLI se
-  # distribuye para que cualquiera la use, no solo en Linux.
-  os-matrix:
-    name: Pruebas en ${{ matrix.os }} (Python 3.12)
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
+  # Job 3 — CLAVE de instalación: simula EXACTAMENTE lo que hará el profesor
+  # con el README, en un entorno limpio (ubuntu + Python 3.12): instala la CLI
+  # como herramienta global y la usa desde el PATH.
+  install-smoke:
+    name: Instalación limpia (uv tool install + smoke del README)
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -130,10 +102,52 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Instalar proyecto + dependencias de desarrollo
-        run: uv venv --python "3.12" && uv pip install -e ".[dev]"
-        shell: bash
+      - name: Instalar la CLI como herramienta global (uv tool install)
+        run: |
+          set -euo pipefail
+          if command -v uv >/dev/null 2>&1; then
+            uv tool install .
+          else
+            pipx install .
+          fi
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Pruebas (pytest)
-        run: uv run --no-sync pytest -ra
-        shell: bash
+      - name: Smoke — limpiador version imprime la versión
+        run: limpiador version | grep -E "limpiador [0-9]+\.[0-9]+"
+
+      # La ayuda debe listar TODAS las órdenes, incluidas `deshacer` y
+      # `doctor`.
+      - name: Smoke — limpiador --help lista todas las órdenes
+        run: |
+          set -euo pipefail
+          AYUDA="$(limpiador --help)"
+          echo "$AYUDA"
+          for orden in version listar acciones validar ejecutar deshacer doctor; do
+            echo "$AYUDA" | grep -q "$orden" || {
+              echo "FALTA la orden '$orden' en --help"; exit 1;
+            }
+          done
+
+      # Con el acciones.json de ejemplo del repo (config de ejemplo):
+      # validar debe salir 0 y `--simular` no puede tocar el disco.
+      - name: Smoke — limpiador validar con el acciones.json de ejemplo
+        run: |
+          set -euo pipefail
+          limpiador --config ./acciones.json validar
+          limpiador validar --json | grep -q '"valido": true'
+
+      - name: Smoke — limpiador doctor sale 0
+        run: limpiador doctor
+
+      - name: Smoke — --simular sobre una carpeta de prueba no escribe
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/smoke-pruebas
+          printf 'x' > /tmp/smoke-pruebas/foto.png
+          printf 'x' > /tmp/smoke-pruebas/basura.tmp
+          ANTES=$(find /tmp/smoke-pruebas -type f -exec sha256sum {} + | sort | sha256sum)
+          limpiador --config ./acciones.json ejecutar mover-imagenes /tmp/smoke-pruebas --simular
+          limpiador --config ./acciones.json ejecutar borrar-temporales /tmp/smoke-pruebas --simular
+          DESPUES=$(find /tmp/smoke-pruebas -type f -exec sha256sum {} + | sort | sha256sum)
+          test "$ANTES" = "$DESPUES" || { echo "--simular TOCO el disco"; exit 1; }
+          test -d /tmp/smoke-pruebas/imagenes && { echo "--simular creó carpetas"; exit 1; }
