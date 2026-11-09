@@ -24,6 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.2",
+    "pytest-cov>=5.0",
     "ruff>=0.6",
     "mypy>=1.10",
 ]
@@ -54,4 +55,18 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = """
+-ra
+--cov=limpiador
+--cov-report=term-missing
+--cov-fail-under=80
+"""
+
+[tool.coverage.run]
+branch = true
+source = ["limpiador"]
+
+[tool.coverage.report]
+# Umbral duro: si la cobertura de `limpiador` baja del 80 %, pytest falla.
+fail_under = 80
+exclude_lines = ["pragma: no cover"]
