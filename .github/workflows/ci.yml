@@ -142,34 +142,34 @@ jobs:
       # Hash del ÁRBOL COMPLETO (carpetas + ficheros), no solo ficheros:
       # así se detectan también las carpetas «fantasma» que una planificación
       # descuidada podría crear (p. ej. papelera/<marca>/ vacía al simular).
-      # Con `pip install .` en un venv NO se instala el paquete `rich` de forma
-      # aislada… sí se instala, pero `python -m pip` es más robusto frente a
-      # espacios en PATH. El problema real que arreglamos aquí: `limpiador`
-      # (y `sha256sum`) viven en `$(python -m site --user-base)/bin`, que no
-      # está en PATH en los runners. Lo exponemos explícitamente en cada paso.
+      # `pip install .` coloca el binario en ~/.local/bin; GITHUB_PATH solo
+      # afecta a pasos futuros, así que lo reexportamos dentro del paso.
       - name: Smoke — --simular sobre una carpeta de prueba no escribe
         run: |
           set -euo pipefail
-          # El binario global quedó en ~/.local/bin (añadido a GITHUB_PATH),
-          # pero GITHUB_PATH solo afecta a PASOS FUTUROS: dentro de este paso
-          # lo reexportamos para que `limpiador` sea resoluble ya.
           export PATH="$HOME/.local/bin:$PATH"
           rm -rf /tmp/smoke-pruebas
           mkdir -p /tmp/smoke-pruebas
           printf 'x' > /tmp/smoke-pruebas/foto.png
           printf 'x' > /tmp/smoke-pruebas/basura.tmp
+          command -v limpiador >/dev/null || { echo "limpiador NO está en PATH"; exit 1; }
+          # `find | sort | while ... | sha256sum`: si el bucle no emite ninguna
+          # línea, sha256sum devuelve el hash de la cadena vacía (e3b0c442...)
+          # y ANTES/DESPUES coincidirían por accidente. Se aborta si eso pasa.
           hash_arbol() {
-            # Rutas relativas + tipo + contenido de todo el árbol, ordenadas:
-            # cualquier carpeta/fichero nuevo o cambiado altera el hash.
-            find "$1" | LC_ALL=C sort | while IFS= read -r ruta; do
+            local h
+            h=$(find "$1" | LC_ALL=C sort | while IFS= read -r ruta; do
               if [ -d "$ruta" ]; then
                 printf 'D %s\n' "${ruta#"$1"}"
               elif [ -f "$ruta" ]; then
                 printf 'F %s %s\n' "${ruta#"$1"}" "$(sha256sum < "$ruta")"
               fi
-            done | sha256sum
+            done | sha256sum)
+            if [ "$h" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  -" ]; then
+              echo "hash_arbol: árbol vacío o ilegible en '$1'"; exit 1
+            fi
+            printf '%s\n' "$h"
           }
-          command -v limpiador >/dev/null || { echo "limpiador NO está en PATH"; exit 1; }
           ANTES=$(hash_arbol /tmp/smoke-pruebas)
           limpiador --config ./acciones.json ejecutar mover-imagenes /tmp/smoke-pruebas --simular
           limpiador --config ./acciones.json ejecutar borrar-temporales /tmp/smoke-pruebas --simular
@@ -177,3 +177,4 @@ jobs:
           test "$ANTES" = "$DESPUES" || { echo "--simular TOCO el disco"; exit 1; }
           test -d /tmp/smoke-pruebas/imagenes && { echo "--simular creó carpetas"; exit 1; }
           test -d /tmp/smoke-pruebas/papelera && { echo "--simular creó la papelera"; exit 1; }
+          echo "smoke OK: árbol intacto bajo --simular"
