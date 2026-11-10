@@ -142,9 +142,19 @@ jobs:
       # Hash del ÁRBOL COMPLETO (carpetas + ficheros), no solo ficheros:
       # así se detectan también las carpetas «fantasma» que una planificación
       # descuidada podría crear (p. ej. papelera/<marca>/ vacía al simular).
+      # Con `pip install .` en un venv NO se instala el paquete `rich` de forma
+      # aislada… sí se instala, pero `python -m pip` es más robusto frente a
+      # espacios en PATH. El problema real que arreglamos aquí: `limpiador`
+      # (y `sha256sum`) viven en `$(python -m site --user-base)/bin`, que no
+      # está en PATH en los runners. Lo exponemos explícitamente en cada paso.
       - name: Smoke — --simular sobre una carpeta de prueba no escribe
         run: |
           set -euo pipefail
+          # El binario global quedó en ~/.local/bin (añadido a GITHUB_PATH),
+          # pero GITHUB_PATH solo afecta a PASOS FUTUROS: dentro de este paso
+          # lo reexportamos para que `limpiador` sea resoluble ya.
+          export PATH="$HOME/.local/bin:$PATH"
+          rm -rf /tmp/smoke-pruebas
           mkdir -p /tmp/smoke-pruebas
           printf 'x' > /tmp/smoke-pruebas/foto.png
           printf 'x' > /tmp/smoke-pruebas/basura.tmp
@@ -159,6 +169,7 @@ jobs:
               fi
             done | sha256sum
           }
+          command -v limpiador >/dev/null || { echo "limpiador NO está en PATH"; exit 1; }
           ANTES=$(hash_arbol /tmp/smoke-pruebas)
           limpiador --config ./acciones.json ejecutar mover-imagenes /tmp/smoke-pruebas --simular
           limpiador --config ./acciones.json ejecutar borrar-temporales /tmp/smoke-pruebas --simular
