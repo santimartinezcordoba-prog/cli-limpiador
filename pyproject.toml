@@ -19,6 +19,7 @@ dependencies = [
     "typer>=0.12.3",
     "rich>=13.7.0",
     "pydantic>=2.7",
+    "httpx>=0.28.0",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +28,7 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.6",
     "mypy>=1.10",
+    "respx>=0.21",
 ]
 
 [project.scripts]
@@ -55,11 +57,16 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Se excluye el directorio `scripts/` de la recolección de tests: la utilidad
+# `scripts/escaner_secretos.py` se autodetecta como test (prefijo `test_`) pero
+# no es un test de pytest. Su comprobación real vive en
+# `tests/test_secretos.py::test_escaner_repo_limpio`.
 addopts = """
 -ra
 --cov=limpiador
 --cov-report=term-missing
 --cov-fail-under=80
+--ignore=scripts
 """
 
 [tool.coverage.run]

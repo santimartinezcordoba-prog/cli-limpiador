@@ -21,3 +21,9 @@ htmlcov/
 
 # Papelera generada por ejecuciones reales de limpiador
 papelera/
+
+# Secretos: la API KEY del centro NUNCA se commitea (se lee de .env o del
+# entorno). `.env` está ignorado; `.env.example` (sin valores) sí se versiona.
+.env
+.env.*
+!.env.example
