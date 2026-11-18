@@ -37,6 +37,7 @@ from limpiador.errores import (
     EXIT_OK,
     EXIT_SIN_CONFIRMAR,
 )
+from limpiador.ia import CentroIA
 from limpiador.papelera import (
     PapeleraError,
     deshacer_operacion,
@@ -349,6 +350,84 @@ def deshacer(
         f"[bold green]Deshecha la operación '{manifiesto.op_id}' "
         f"de la acción '{manifiesto.accion}' ({manifiesto.timestamp}).[/]"
     )
+
+
+@app.command("comprobar-ia")
+def comprobar_ia(
+    salida_json: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Emite el resultado como JSON estructurado (para scripts).",
+        ),
+    ] = False,
+) -> None:
+    """Smoke test de la IA del centro. Exit: 0 ok, 3 sin key, 4 sin red.
+
+    Comprueba (en este orden) que la API key está PRESENTE —sin imprimirla
+    nunca, solo «presente/ausente»— y lanza un ping mínimo al modelo con
+    timeout. Si algo falla, la salida (texto o `--json`) está redactada: la
+    clave no puede aparecer ni en el mensaje ni en el log.
+    """
+    from limpiador.ia import (
+        COMPROBACION_OK,
+        COMPROBACION_SIN_KEY,
+        comprobar_centro,
+    )
+
+    centro = CentroIA.desde_entorno()
+    resultado = comprobar_centro(centro)
+    if salida_json:
+        typer.echo(
+            json.dumps(
+                {
+                    "estado": resultado.estado,
+                    "key": "presente" if resultado.tiene_key else "ausente",
+                    "modelo": resultado.modelo,
+                    "latencia_s": (
+                        round(resultado.latencia_s, 3)
+                        if resultado.latencia_s is not None
+                        else None
+                    ),
+                    "detalle": resultado.detalle,
+                },
+                ensure_ascii=False,
+            )
+        )
+    else:
+        clave = "presente" if resultado.tiene_key else "ausente"
+        console.print(f"[bold]key[/]: {clave}")
+        console.print(f"[bold]modelo[/]: {resultado.modelo}")
+        if resultado.estado == COMPROBACION_OK:
+            assert resultado.latencia_s is not None
+            console.print(
+                f"[green]✓ ok[/] — el centro respondió en "
+                f"[bold]{resultado.latencia_s:.2f} s[/]."
+            )
+        elif resultado.estado == COMPROBACION_SIN_KEY:
+            console.print(
+                "[red]✗ sin key[/] — define LIMPIADOR_IA_KEY en .env o en el "
+                "entorno. Las acciones IA siguen usables porque que degradan a "
+                "heurística local ([modo offline])."
+            )
+            if resultado.detalle:
+                console.print(f"[dim]{redact(resultado.detalle)}[/]")
+        else:
+            console.print(
+                "[yellow]⚠ sin red[/] — la key está presente pero el centro "
+                "no respondió (timeout/5xx/sin conexión)."
+            )
+            console.print(f"[dim]{redact(resultado.detalle)}[/]")
+            console.print(
+                "[dim]Las acciones IA degradan a heurística local: nadie se "
+                "queda sin resultado.[/] "
+                "Salida: completado en modo degradado (exit 4)."
+            )
+    if resultado.estado == COMPROBACION_OK:
+        raise typer.Exit(EXIT_OK)
+    if resultado.estado == COMPROBACION_SIN_KEY:
+        raise typer.Exit(EXIT_CONFIG_INVALIDA)
+    raise typer.Exit(EXIT_OFFLINE)
 
 
 def _ejecutar_ia_o_salir(
