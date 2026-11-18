@@ -140,7 +140,9 @@ class CentroIA:
     # Punto de inyección de tests: `monkeypatch.setattr(CentroIA,
     # "_nuevo_cliente", fabrica_falsa)`. En producción es el httpx.Client
     # real; los tests lo sustituyen y NUNCA tocan la red.
-    _nuevo_cliente: ClassVar[_FabricaCliente] = _cliente_por_defecto
+    # staticmethod EXPLÍCITO: sin él, `self._nuevo_cliente(...)` reenviaría la
+    # instancia como primer argumento posicional.
+    _nuevo_cliente: ClassVar[_FabricaCliente] = staticmethod(_cliente_por_defecto)
 
     def __init__(self, *, key: str | None, base_url: str, modelo: str, timeout: float,
                  ca_bundle: str | None = None) -> None:
