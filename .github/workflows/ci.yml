@@ -11,6 +11,35 @@ permissions:
   contents: read
 
 jobs:
+  # Job 0 — SECRET SCAN: «ninguna clave en el historial». Escanea TODOS los
+  # ficheros versionados (git ls-files; nunca .env) con los patrones de
+  # limpiador.secretos y BLOQUEA EL MERGE si aparece un patrón de API key.
+  # Duplica la garantía del test test_no_hay_claves_en_repo por si alguien
+  # ejecuta pytest sin pasar por este job.
+  secret-scan:
+    name: Escáner de secretos (bloquea merge si se filtra una key)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar proyecto + dependencias de desarrollo
+        run: uv venv --python "3.12" && uv pip install -e ".[dev]"
+
+      - name: Escanear ficheros versionados (sale 1 si hay key -> merge bloqueado)
+        run: uv run --no-sync python scripts/escaner_secretos.py
+
   # Job 1 — calidad estática: ruff + mypy (ubuntu + Python 3.12).
   lint:
     name: Lint (ruff) + tipos (mypy)
@@ -115,18 +144,35 @@ jobs:
       - name: Smoke — limpiador version imprime la versión
         run: limpiador version | grep -E "limpiador [0-9]+\.[0-9]+"
 
-      # La ayuda debe listar TODAS las órdenes, incluidas `deshacer` y
-      # `doctor`.
+      # La ayuda debe listar TODAS las órdenes (incluidas las de la semana 3:
+      # `comprobar-ia`).
       - name: Smoke — limpiador --help lista todas las órdenes
         run: |
           set -euo pipefail
           AYUDA="$(limpiador --help)"
           echo "$AYUDA"
-          for orden in version listar acciones validar ejecutar deshacer doctor; do
+          for orden in version listar acciones validar ejecutar deshacer doctor comprobar-ia; do
             echo "$AYUDA" | grep -q "$orden" || {
               echo "FALTA la orden '$orden' en --help"; exit 1;
             }
           done
+
+      # `comprobar-ia` sin key DEBE salir 3 (contrato de exit codes) y su
+      # salida no puede contener la key: en CI no hay ninguna, así que el
+      # grep de «sk-» siempre debe fallar (por eso el `||` del grep es el
+      # camino feliz aquí).
+      - name: Smoke — comprobar-ia sin key sale 3 y no filtra secretos
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          salida="$(limpiador comprobar-ia --json)"
+          echo "$salida" | grep -q '"estado": "sin_key"'
+          echo "$salida" | grep -q '"key": "ausente"'
+          if echo "$salida" | grep -Eiq 'sk-[a-z0-9]{8,}'; then
+            echo "comprobar-ia FILTRÓ una clave"; exit 1
+          fi
+          limpiador comprobar-ia; estado=$?
+          test "$estado" -eq 3 || { echo "exit esperado 3, obtenido $estado"; exit 1; }
 
       # Con el acciones.json de ejemplo del repo (config de ejemplo):
       # validar debe salir 0 y `--simular` no puede tocar el disco.
