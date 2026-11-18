@@ -19,6 +19,7 @@ from typing import Annotated, Final
 
 import typer
 from rich.console import Console
+from rich.text import Text
 
 from limpiador import __version__
 from limpiador.acciones import AccionError, Operacion, buscar_accion, planificar
@@ -269,18 +270,24 @@ def ejecutar_accion(
         )
         raise typer.Exit(EXIT_OK)
 
+    if accion.operacion in OPERACIONES_IA:
+        # Motor IA (sin Typer dentro): sin key ni red degrada a heurística
+        # (exit 4). El plan IA es orientativo: la tabla solo se pinta en
+        # --simular; en modo real el motor recalcula objetivo y destino.
+        if simular:
+            console.print(tabla_operaciones(plan, simulacion=True))
+            console.print(
+                "[yellow]Simulación: no se ha modificado nada (la IA decide "
+                "la salida al ejecutar).[/]"
+            )
+            raise typer.Exit(EXIT_OK)
+        raise typer.Exit(_ejecutar_ia_o_salir(accion, nombre, carpeta, plan, si=si))
+
     console.print(tabla_operaciones(plan, simulacion=simular))
 
     if simular:
         console.print("[yellow]Simulación: no se ha modificado nada.[/]")
         raise typer.Exit(EXIT_OK)
-
-    if accion.operacion in OPERACIONES_IA:
-        # Las acciones IA viven en su propio motor (sin Typer dentro): la CLI
-        # solo decora. Sin key ni red no petan: degradan a heurística (exit 4).
-        raise typer.Exit(
-            _ejecutar_ia_o_salir(accion, nombre, carpeta, plan, si=si)
-        )
 
     if not si:
         if not _stdin_interactivo():
@@ -406,13 +413,15 @@ def comprobar_ia(
             )
         elif resultado.estado == COMPROBACION_SIN_KEY:
             console.print(
-                "[red]✗ sin key[/] — define LIMPIADOR_IA_KEY en .env o en el "
-                "entorno. Las acciones IA siguen usables porque que degradan a "
-                "heurística local ([modo offline])."
+                Text(
+                    "[red]✗ sin key[/] — define LIMPIADOR_IA_KEY en .env o en "
+                    "el entorno. Las acciones IA siguen usables porque "
+                    "degradan a heurística local ([modo offline])."
+                )
             )
             if resultado.detalle:
                 console.print(f"[dim]{redact(resultado.detalle)}[/]")
-        else:
+        else:  # COMPROBACION_SIN_RED
             console.print(
                 "[yellow]⚠ sin red[/] — la key está presente pero el centro "
                 "no respondió (timeout/5xx/sin conexión)."
@@ -427,7 +436,7 @@ def comprobar_ia(
         raise typer.Exit(EXIT_OK)
     if resultado.estado == COMPROBACION_SIN_KEY:
         raise typer.Exit(EXIT_CONFIG_INVALIDA)
-    raise typer.Exit(EXIT_OFFLINE)
+    raise typer.Exit(EXIT_OFFLINE)  # sin red: degradado, no crash
 
 
 def _ejecutar_ia_o_salir(
@@ -462,13 +471,25 @@ def _ejecutar_ia_o_salir(
         return EXIT_ERROR
 
     for linea in bitacora:
-        color = "yellow" if "offline" in linea else "green"
-        console.print(f"  [{color}]✓[/] {redact(linea)}")
+        # El aviso `[modo offline]` se pinta como Text LITERAL: si se dejase
+        # a Rich, el corchete se leería como markup y la línea (o el aviso)
+        # desaparecería de la consola.
+        if linea.startswith("[modo offline]"):
+            aviso = Text("  ✓ ", style="yellow")
+            aviso.append("[modo offline] ", style="bold yellow")
+            aviso.append(redact(linea[len("[modo offline]") :]))
+            console.print(aviso)
+        else:
+            consola_linea = Text("  ✓ ", style="green") + Text(redact(linea))
+            console.print(consola_linea)
     if codigo == EXIT_OFFLINE:
-        console.print(
-            "[bold yellow][modo offline][/]: sin key o sin conexión, resuelto "
-            "con heurística local. Nada se ha perdido.[/]"
+        aviso_final = Text("⚠ ", style="yellow")
+        aviso_final.append("[modo offline] ", style="bold yellow")
+        aviso_final.append(
+            "sin key o sin conexión: completado en modo degradado con "
+            "heurística local. Nada se ha perdido."
         )
+        console.print(aviso_final)
         if ruta_log is not None:
             console.print(f"[dim]Log de auditoría: {ruta_log}[/]")
         console.print(f"[bold yellow]Acción '{nombre}' completada en modo degradado.[/]")

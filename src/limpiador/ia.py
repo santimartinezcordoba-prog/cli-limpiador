@@ -38,7 +38,7 @@ import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
-from typing import ClassVar, Final
+from typing import Any, ClassVar, Final
 
 import httpx
 
@@ -109,6 +109,73 @@ class RespuestaIA:
 _FabricaCliente = Callable[..., AbstractContextManager[httpx.Client]]
 
 
+class _SinBinding:
+    """Descriptor: `inst._f` devuelve la función tal cual (sin binding).
+
+    `staticmethod(f)` parece resolver esto, pero cuando un test sustituye el
+    atributo por una función normal (`monkeypatch.setattr`), la lectura
+    `self._f` VUELVE a enlazar y pasa `self` como posicional. Este descriptor
+    devuelve siempre la función desnuda, puesta por la clase o por el test.
+    """
+
+    def __init__(self, funcion: object) -> None:
+        self._funcion = funcion
+
+    def __get__(self, instancia: object, clase: type | None = None) -> Any:
+        return self._funcion
+
+
+class ClienteSimulado(httpx.Client):
+    """Cliente httpx que NO abre sockets: lanza `_exc` o devuelve `_respuesta`.
+
+    Los tests de IA lo inyectan vía `CentroIA._nuevo_cliente`, así pueden
+    simular timeout/503/respuesta válida sin tocar la red (contrato de CI:
+    los tests de IA usan mock/monkeypatch, NUNCA red real).
+    """
+
+    def __init__(
+        self,
+        *,
+        exc: Exception | None = None,
+        respuesta: httpx.Response | None = None,
+        **kwargs: object,
+    ) -> None:
+        self._exc = exc
+        self._respuesta = respuesta
+        super().__init__(**kwargs)  # type: ignore[arg-type]
+
+    def send(self, request: httpx.Request, **kwargs: object) -> httpx.Response:
+        if self._exc is not None:
+            raise self._exc
+        assert self._respuesta is not None
+        self._respuesta._request = request
+        return self._respuesta
+
+
+def fabrica_de_cliente_simulado(
+    *, exc: Exception | None = None, respuesta: httpx.Response | None = None
+) -> _FabricaCliente:
+    """Devuelve la factoría que inyecta `ClienteSimulado` a `CentroIA`.
+
+    Uso en tests:
+    `monkeypatch.setattr(CentroIA, "_nuevo_cliente",
+    fabrica_de_cliente_simulado(respuesta=respuesta_ok()))`.
+    """
+
+    @contextmanager
+    def _fabrica(**kwargs: object) -> Iterator[httpx.Client]:
+        yield ClienteSimulado(exc=exc, respuesta=respuesta, **kwargs)
+
+    return _fabrica
+
+
+def respuesta_chat(contenido: str) -> httpx.Response:
+    """Respuesta 200 con forma OpenAI-compatible (para el camino feliz)."""
+    return httpx.Response(
+        200, json={"choices": [{"message": {"role": "assistant", "content": contenido}}]}
+    )
+
+
 @contextmanager
 def _cliente_por_defecto(**kwargs: object) -> Iterator[httpx.Client]:
     """Cliente httpx real (forma correcta 0.28: `base_url`+`timeout`, sin
@@ -140,9 +207,20 @@ class CentroIA:
     # Punto de inyección de tests: `monkeypatch.setattr(CentroIA,
     # "_nuevo_cliente", fabrica_falsa)`. En producción es el httpx.Client
     # real; los tests lo sustituyen y NUNCA tocan la red.
-    # staticmethod EXPLÍCITO: sin él, `self._nuevo_cliente(...)` reenviaría la
-    # instancia como primer argumento posicional.
-    _nuevo_cliente: ClassVar[_FabricaCliente] = staticmethod(_cliente_por_defecto)
+    # _SinBinding: al leerse desde la instancia NO reenvía `self` como primer
+    # argumento (una función normal sí lo haría); con `staticmethod` puro,
+    # monkeypatch la volvería función enlazable y petaría igual.
+    _nuevo_cliente: ClassVar[_FabricaCliente] = _SinBinding(_cliente_por_defecto)  # type: ignore[assignment]
+
+    @classmethod
+    def _fabrica_cliente(cls) -> _FabricaCliente:
+        """Factoría vigente, leída SIN binding (el descriptor o lo que monte
+        el test en `_nuevo_cliente` se usa tal cual, sin pasar `self`)."""
+        crudo: object = cls.__dict__.get("_nuevo_cliente", _cliente_por_defecto)
+        if isinstance(crudo, _SinBinding):
+            crudo = crudo._funcion
+        fabrica: _FabricaCliente = crudo  # type: ignore[assignment]
+        return fabrica
 
     def __init__(self, *, key: str | None, base_url: str, modelo: str, timeout: float,
                  ca_bundle: str | None = None) -> None:
@@ -205,7 +283,7 @@ class CentroIA:
         modelo_usado = modelo or self._modelo
         inicio = time.monotonic()
         try:
-            with self._nuevo_cliente(
+            with self._fabrica_cliente()(
                 base_url=self._base_url,
                 timeout=httpx.Timeout(self._timeout),
                 follow_redirects=True,

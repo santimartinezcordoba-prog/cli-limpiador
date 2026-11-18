@@ -21,6 +21,7 @@ Heurística local (modo offline, determinista):
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
@@ -190,6 +191,14 @@ def _etiqueta_desde_respuesta(respuesta: str) -> str:
     for etiqueta in ETIQUETAS_CLASIFICAR:
         if etiqueta in bajo:
             return etiqueta
+    # Sin etiqueta literal: se reduce a una etiqueta válida por token con
+    # acentos/tildes quitados ("Código." -> "codigo"). Nunca se devuelve
+    # texto crudo: evitaría carpetas basura sacadas de la prosa del modelo.
+    sin_accents = unicodedata.normalize("NFKD", bajo).encode("ascii", "ignore").decode()
+    tokens: list[str] = re.findall(r"[a-z][a-z-]*", sin_accents)
+    for token in tokens:
+        if token in ETIQUETAS_CLASIFICAR:
+            return token
     return "sin-clasificar"
 
 
@@ -242,9 +251,11 @@ def ejecutar_resumir(
         destino = _ruta_libre(destino_dir / f"resumen-{origen.stem}.md")
         destino.parent.mkdir(parents=True, exist_ok=True)
         destino.write_text(_cabecera_resumen(origen, contenido, offline), encoding="utf-8")
-        marca = " [modo offline]" if offline else ""
         bitacora.append(
-            f"resumen de {origen.name} -> {destino.relative_to(raiz)}{marca}"
+            f"[modo offline] resumen de {origen.name} -> "
+            + f"{destino.relative_to(raiz)}"
+            if offline
+            else f"resumen de {origen.name} -> {destino.relative_to(raiz)}"
         )
         linea_log.append(
             f"- {origen.name}: "
@@ -286,9 +297,10 @@ def ejecutar_clasificar(
         destino_dir.mkdir(parents=True, exist_ok=True)
         destino = _ruta_libre(destino_dir / origen.name)
         _copiar(origen, destino)
-        marca = " [modo offline]" if offline else ""
         bitacora.append(
-            f"clasificado {origen.name} -> {etiqueta}/{destino.name}{marca}"
+            f"[modo offline] clasificado {origen.name} -> {etiqueta}/{destino.name}"
+            if offline
+            else f"clasificado {origen.name} -> {etiqueta}/{destino.name}"
         )
         linea_log.append(
             f"- {origen.name}: {etiqueta} ("
