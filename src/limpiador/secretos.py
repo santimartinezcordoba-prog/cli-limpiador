@@ -76,12 +76,15 @@ _PATRON_ESCANER_ASIGNACION: Final[re.Pattern[str]] = re.compile(
 )
 
 # Patrones de FALSO POSITIVO que el escáner tolera (docs, tests y el propio
-# código de este módulo hablan DE claves sin contener ninguna).
+# código de este módulo hablan DE claves sin contener ninguna). Un literal
+# marcado con `# scannner: ejemplo` es, por definición, un ejemplo falso: el
+# detector lo ignora. El marcador usa `nn` para NO autodetectarse.
 _PERMITIDO_ESCANER: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"\[redactad", re.IGNORECASE),
     re.compile(r"\bREDACTAD\w*\b"),
     re.compile(r"\bsk-\[?[Xx*]{2,}"),
     re.compile(r"ejemplo|sample|placeholder|exemplo|tu-?\s?api|my-?api", re.IGNORECASE),
+    re.compile(r"#\s*scan{2}er:\s*ejemplo"),
 )
 
 # Patrones con los que el escáner escanea todo el repo (selección dura, para el

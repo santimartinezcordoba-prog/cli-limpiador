@@ -70,7 +70,9 @@ CONFIG_VALIDA: dict[str, Any] = {
 
 
 @pytest.fixture(autouse=True)
-def _salida_determinista(monkeypatch: pytest.MonkeyPatch) -> None:
+def _salida_determinista(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Consola de Rich ancha para que los tests sean estables.
 
     COLUMNS=200 evita que Rich parta las líneas en columnas estrechas: así
@@ -78,9 +80,22 @@ def _salida_determinista(monkeypatch: pytest.MonkeyPatch) -> None:
     hubiera, se eliminan en cada test con `salida_normalizada`, por lo que
     el resultado no depende de cómo cada versión de Rich detecte la
     terminal (en GitHub Actions llegaba a emitir escapes pese a NO_COLOR).
+
+    Además AÍSLA el entorno de IA: borra las variables LIMPIADOR_* y cambia
+    el cwd a `tmp_path`, para que ningún test herede un `.env` real ni una
+    key de la máquina (los tests de IA usan monkeypatch, NUNCA red real).
     """
     monkeypatch.setenv("COLUMNS", "200")
     monkeypatch.setattr(console, "_width", 200)
+    for variable in (
+        "LIMPIADOR_IA_KEY",
+        "LIMPIADOR_IA_URL",
+        "LIMPIADOR_IA_MODELO",
+        "LIMPIADOR_IA_TIMEOUT",
+        "LIMPIADOR_CA_BUNDLE",
+    ):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.chdir(tmp_path)
 
 
 @pytest.fixture()

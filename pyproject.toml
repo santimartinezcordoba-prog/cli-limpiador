@@ -52,7 +52,7 @@ select = ["E", "F", "W", "I", "N", "UP", "B"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
-files = ["src"]
+files = ["src", "scripts"]
 plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
