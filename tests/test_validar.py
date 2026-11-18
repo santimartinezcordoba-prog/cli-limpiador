@@ -118,7 +118,8 @@ def test_validar_operacion_no_soportada(runner: CliRunner, tmp_path: Path) -> No
     # El mensaje lista la whitelist completa y apunta al índice y campo real.
     assert (
         "acciones[1].operacion: valor no soportado "
-        "(permitido: mover, borrar, renombrar, dedup)" in salida
+        "(permitido: mover, borrar, renombrar, dedup, resumir-texto, "
+        "clasificar-ficheros)" in salida
     )
 
 

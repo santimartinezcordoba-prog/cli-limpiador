@@ -1,11 +1,13 @@
 """Punto de entrada de la CLI `limpiador`.
 
-Códigos de salida:
+Códigos de salida (contrato centralizado en `limpiador.errores`):
 - 0: todo correcto.
 - 1: error de uso en tiempo de ejecución (acción o carpeta inexistente,
   o `deshacer` sin manifiesto / operación no reversible).
 - 2: falta confirmación (sin TTY y sin ``--si``) o flags incompatibles.
-- 3: el fichero de configuración no es válido.
+- 3: el fichero de configuración no es válido (o `comprobar-ia` sin API key).
+- 4: completado en modo degradado (acción IA sin red) o `comprobar-ia` sin
+  conexión con el centro.
 """
 
 from __future__ import annotations
@@ -21,18 +23,27 @@ from rich.console import Console
 from limpiador import __version__
 from limpiador.acciones import AccionError, Operacion, buscar_accion, planificar
 from limpiador.acciones import ejecutar as ejecutar_plan
-from limpiador.config import Accion, Config, ConfigInvalidaError, cargar_config
+from limpiador.config import (
+    OPERACIONES_IA,
+    Accion,
+    Config,
+    ConfigInvalidaError,
+    cargar_config,
+)
+from limpiador.errores import (
+    EXIT_CONFIG_INVALIDA,
+    EXIT_ERROR,
+    EXIT_OFFLINE,
+    EXIT_OK,
+    EXIT_SIN_CONFIRMAR,
+)
 from limpiador.papelera import (
     PapeleraError,
     deshacer_operacion,
     resolver_papelera_cli,
 )
+from limpiador.secretos import redact
 from limpiador.tabla import tabla_acciones, tabla_ficheros, tabla_operaciones
-
-EXIT_OK: Final = 0
-EXIT_ERROR: Final = 1
-EXIT_SIN_CONFIRMAR: Final = 2
-EXIT_CONFIG_INVALIDA: Final = 3
 
 RESPUESTAS_AFIRMATIVAS: Final[frozenset[str]] = frozenset({"s", "si", "sí", "y", "yes"})
 
@@ -247,7 +258,7 @@ def ejecutar_accion(
     try:
         plan = planificar(accion, carpeta)
     except AccionError as exc:
-        console.print(f"[red]✗ {exc}[/]")
+        console.print(f"[red]✗ {redact(str(exc))}[/]")
         raise typer.Exit(EXIT_ERROR) from exc
 
     if not plan:
@@ -263,6 +274,13 @@ def ejecutar_accion(
         console.print("[yellow]Simulación: no se ha modificado nada.[/]")
         raise typer.Exit(EXIT_OK)
 
+    if accion.operacion in OPERACIONES_IA:
+        # Las acciones IA viven en su propio motor (sin Typer dentro): la CLI
+        # solo decora. Sin key ni red no petan: degradan a heurística (exit 4).
+        raise typer.Exit(
+            _ejecutar_ia_o_salir(accion, nombre, carpeta, plan, si=si)
+        )
+
     if not si:
         if not _stdin_interactivo():
             console.print(
@@ -275,11 +293,14 @@ def ejecutar_accion(
     try:
         bitacora, ruta_manifiesto = ejecutar_plan(accion, carpeta, plan)
     except (AccionError, OSError) as exc:
-        console.print(f"[red]✗ Error al ejecutar: {exc}[/]")
+        # `redact` SIEMPRE: un error del motor puede arrastrar la key del
+        # centro (p. ej. un volcado de la cabecera Authorization). La consola
+        # solo puede ver la máscara.
+        console.print(f"[red]✗ Error al ejecutar: {redact(str(exc))}[/]")
         raise typer.Exit(EXIT_ERROR) from exc
 
     for linea in bitacora:
-        console.print(f"  [green]✓[/] {linea}")
+        console.print(f"  [green]✓[/] {redact(linea)}")
     console.print(f"[bold green]Acción '{nombre}' ejecutada.[/]")
     if ruta_manifiesto is not None:
         console.print(
@@ -328,6 +349,55 @@ def deshacer(
         f"[bold green]Deshecha la operación '{manifiesto.op_id}' "
         f"de la acción '{manifiesto.accion}' ({manifiesto.timestamp}).[/]"
     )
+
+
+def _ejecutar_ia_o_salir(
+    accion: Accion, nombre: str, carpeta: Path, plan: list[Operacion], *, si: bool
+) -> int:
+    """Ejecuta una acción IA con la misma política de confirmación que el resto.
+
+    La ejecución IA real NUNCA se lanza sin confirmación (`--si` o `s/N`):
+    el plan ya mostrado es orientativo y el motor IA vuelve a contar los
+    objetivos sobre la carpeta ya validada. Salida siempre redactada.
+    """
+    from limpiador import acciones_ia
+
+    if not si:
+        if not _stdin_interactivo():
+            console.print(
+                "[red]✗ Sin terminal interactivo la ejecución requiere --si "
+                "(o usa --simular).[/]"
+            )
+            return EXIT_SIN_CONFIRMAR
+        try:
+            _pedir_confirmacion_o_salir(nombre, carpeta, plan)
+        except typer.Exit as exc:
+            assert isinstance(exc.exit_code, int)
+            return exc.exit_code
+
+    try:
+        _, raiz, objetivos, _ = acciones_ia.planificar_ia_desde(accion, carpeta)
+        bitacora, codigo, ruta_log = acciones_ia.ejecutar_ia(accion, raiz, objetivos)
+    except (acciones_ia.IAError, AccionError, OSError) as exc:
+        console.print(f"[red]✗ Error al ejecutar la acción IA: {redact(str(exc))}[/]")
+        return EXIT_ERROR
+
+    for linea in bitacora:
+        color = "yellow" if "offline" in linea else "green"
+        console.print(f"  [{color}]✓[/] {redact(linea)}")
+    if codigo == EXIT_OFFLINE:
+        console.print(
+            "[bold yellow][modo offline][/]: sin key o sin conexión, resuelto "
+            "con heurística local. Nada se ha perdido.[/]"
+        )
+        if ruta_log is not None:
+            console.print(f"[dim]Log de auditoría: {ruta_log}[/]")
+        console.print(f"[bold yellow]Acción '{nombre}' completada en modo degradado.[/]")
+        return EXIT_OFFLINE
+    console.print(f"[bold green]Acción '{nombre}' ejecutada con la IA del centro.[/]")
+    if ruta_log is not None:
+        console.print(f"[dim]Log de auditoría: {ruta_log}[/]")
+    return EXIT_OK
 
 
 def _pedir_confirmacion_o_salir(nombre: str, carpeta: Path, plan: list[Operacion]) -> None:
