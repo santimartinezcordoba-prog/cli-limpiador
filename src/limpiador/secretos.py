@@ -61,15 +61,9 @@ _PATRONES_REDACT: Final[tuple[re.Pattern[str], ...]] = (
 
 # Patrones usados por el ESCÁNER del repositorio. Se mantiene separada para
 # poder afinar umbrales sin afectar a `redact`.
-_PATRON_ESCANER_KEY: Final[re.Pattern[str]] = re.compile(
-    r"(?i)\bsk-[a-z0-9_\-]{8,}\b"
-)
-_PATRON_ESCANER_BEARER: Final[re.Pattern[str]] = re.compile(
-    r"(?i)\bbearer\s+[a-z0-9._~+/=-]{12,}"
-)
-_PATRON_ESCANER_OPENAI: Final[re.Pattern[str]] = re.compile(
-    r"\bsk-[A-Za-z0-9_\-]{20,}\b"
-)
+_PATRON_ESCANER_KEY: Final[re.Pattern[str]] = re.compile(r"(?i)\bsk-[a-z0-9_\-]{8,}\b")
+_PATRON_ESCANER_BEARER: Final[re.Pattern[str]] = re.compile(r"(?i)\bbearer\s+[a-z0-9._~+/=-]{12,}")
+_PATRON_ESCANER_OPENAI: Final[re.Pattern[str]] = re.compile(r"\bsk-[A-Za-z0-9_\-]{20,}\b")
 _PATRON_ESCANER_ASIGNACION: Final[re.Pattern[str]] = re.compile(
     r"(?i)\b(?:api[_-]?key|apikey|access[_-]?token|auth[_-]?token|secret[_-]?key)\b[\"']?\s*[:=]\s*"
     r"[\"'][^\"'\n]{8,}[\"']"

@@ -73,9 +73,7 @@ def mix_de_ficheros(tmp_path: Path) -> Path:
 def config_papelera_dedup(tmp_path: Path) -> Path:
     """Config con `papelera: true` en borrar y una acción dedup."""
     ruta = tmp_path / "acciones-papelera.json"
-    ruta.write_text(
-        json.dumps(CONFIG_PAPELERA_Y_DEDUP, ensure_ascii=False), encoding="utf-8"
-    )
+    ruta.write_text(json.dumps(CONFIG_PAPELERA_Y_DEDUP, ensure_ascii=False), encoding="utf-8")
     return ruta
 
 
@@ -90,7 +88,8 @@ def test_simular_no_toca_disco_hash_identico(
     antes = tree_hash(mix_de_ficheros)
 
     resultado = llamar(
-        runner, ["ejecutar", accion, str(mix_de_ficheros), "--simular"],
+        runner,
+        ["ejecutar", accion, str(mix_de_ficheros), "--simular"],
         config=config_valida,
     )
     salida = salida_normalizada(resultado.output)
@@ -103,8 +102,7 @@ def test_simular_no_toca_disco_hash_identico(
     # La garantía de seguridad, medida en bytes: el árbol está IDENTICO.
     despues = tree_hash(mix_de_ficheros)
     assert despues == antes, (
-        f"'--simular' ({accion}) modificó el árbol: "
-        f"{antes[:12]}... != {despues[:12]}..."
+        f"'--simular' ({accion}) modificó el árbol: {antes[:12]}... != {despues[:12]}..."
     )
 
 
@@ -131,7 +129,8 @@ def test_simular_con_papelera_no_crea_carpetas_fantasma(
     antes = tree_hash(mix_de_ficheros)
 
     resultado = llamar(
-        runner, ["ejecutar", accion, str(mix_de_ficheros), "--simular"],
+        runner,
+        ["ejecutar", accion, str(mix_de_ficheros), "--simular"],
         config=config_papelera_dedup,
     )
     assert resultado.exit_code == 0, resultado.output
@@ -139,7 +138,6 @@ def test_simular_con_papelera_no_crea_carpetas_fantasma(
 
     despues = tree_hash(mix_de_ficheros)
     assert despues == antes, (
-        f"'--simular' ({accion}) modificó el árbol: "
-        f"{antes[:12]}... != {despues[:12]}..."
+        f"'--simular' ({accion}) modificó el árbol: {antes[:12]}... != {despues[:12]}..."
     )
     assert not (mix_de_ficheros / "papelera").exists()

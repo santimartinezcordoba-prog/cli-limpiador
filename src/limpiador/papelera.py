@@ -111,9 +111,7 @@ def escribir_manifiesto(
         ],
         "deshecha": None,
     }
-    ruta.write_text(
-        json.dumps(documento, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    ruta.write_text(json.dumps(documento, ensure_ascii=False, indent=2), encoding="utf-8")
     return ruta
 
 
@@ -188,8 +186,7 @@ def deshacer_operacion(papelera_base: Path, n: int = 1) -> tuple[Manifiesto, lis
         )
     if n > len(manifiestos):
         raise PapeleraError(
-            f"solo hay {len(manifiestos)} operación(es) deshacible(s); "
-            f"la número {n} no existe"
+            f"solo hay {len(manifiestos)} operación(es) deshacible(s); la número {n} no existe"
         )
     manifiesto = manifiestos[n - 1]
     if any(e.destino is None for e in manifiesto.entradas):

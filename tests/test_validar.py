@@ -148,9 +148,7 @@ def test_validar_mover_sin_destino(runner: CliRunner, tmp_path: Path) -> None:
     salida = salida_normalizada(resultado.output)
 
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert (
-        "acciones[0]: 'destino' es obligatorio cuando operacion='mover'" in salida
-    )
+    assert "acciones[0]: 'destino' es obligatorio cuando operacion='mover'" in salida
 
 
 def test_validar_renombrar_sin_sufijo(runner: CliRunner, tmp_path: Path) -> None:
@@ -163,9 +161,7 @@ def test_validar_renombrar_sin_sufijo(runner: CliRunner, tmp_path: Path) -> None
     salida = salida_normalizada(resultado.output)
 
     assert resultado.exit_code == EXIT_CONFIG_INVALIDA
-    assert (
-        "acciones[3]: 'sufijo' es obligatorio cuando operacion='renombrar'" in salida
-    )
+    assert "acciones[3]: 'sufijo' es obligatorio cuando operacion='renombrar'" in salida
 
 
 def test_validar_destino_en_operacion_incompatible(runner: CliRunner, tmp_path: Path) -> None:

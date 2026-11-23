@@ -38,6 +38,7 @@ def _config_que_falla_con_la_key(clave: str) -> dict[str, Any]:
     )
     return config
 
+
 # Claves inventadas, formato realista pero sin valor alguno.
 FAKE_KEY = "sk-fake000000000000000000"  # scanner: ejemplo
 FAKE_TOKEN = "abcdef0123456789"
@@ -80,9 +81,7 @@ def test_redacta_clave_en_error(
 
     def explosion(*args: object, **kwargs: object) -> Any:
         # Error que arrastra la key, como haría un traceback con cabeceras.
-        raise AccionError(
-            f"el centro rechazó la petición: Authorization: Bearer {clave}"
-        )
+        raise AccionError(f"el centro rechazó la petición: Authorization: Bearer {clave}")
 
     # La CLI hace `from ... import ejecutar` al importar: se parchea la
     # referencia que usa `cli.py`, que es la que se invoca al ejecutar.

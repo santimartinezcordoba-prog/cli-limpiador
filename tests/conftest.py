@@ -34,6 +34,7 @@ def salida_normalizada(texto: str) -> str:
     sin_ansi = ANSI.sub("", texto)
     return re.sub(r"\s+", " ", sin_ansi)
 
+
 # Configuración de ejemplo con las 4 operaciones que usan los tests.
 CONFIG_VALIDA: dict[str, Any] = {
     "version": 1,
@@ -70,9 +71,7 @@ CONFIG_VALIDA: dict[str, Any] = {
 
 
 @pytest.fixture(autouse=True)
-def _salida_determinista(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def _salida_determinista(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Consola de Rich ancha para que los tests sean estables.
 
     COLUMNS=200 evita que Rich parta las líneas en columnas estrechas: así

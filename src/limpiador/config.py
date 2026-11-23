@@ -167,9 +167,7 @@ class Accion(BaseModel):
         if valor is None:
             return valor
         if valor not in MODOS_OFFLINE_VALIDOS:
-            raise ValueError(
-                f"valor no soportado (permitido: {LISTA_MODOS_OFFLINE})"
-            )
+            raise ValueError(f"valor no soportado (permitido: {LISTA_MODOS_OFFLINE})")
         return valor
 
     @model_validator(mode="after")
@@ -186,38 +184,26 @@ class Accion(BaseModel):
         """
         if self.operacion == "mover":
             if self.destino is None:
-                raise ValueError(
-                    "'destino' es obligatorio cuando operacion='mover'"
-                )
+                raise ValueError("'destino' es obligatorio cuando operacion='mover'")
         elif self.destino is not None:
             raise ValueError("'destino' solo aplica a la operación 'mover'")
         if self.operacion == "renombrar":
             if self.sufijo is None:
-                raise ValueError(
-                    "'sufijo' es obligatorio cuando operacion='renombrar'"
-                )
+                raise ValueError("'sufijo' es obligatorio cuando operacion='renombrar'")
         elif self.sufijo is not None:
             raise ValueError("'sufijo' solo aplica a la operación 'renombrar'")
         # Papelera y campos IA solo aplican a sus operaciones.
         if self.papelera is not None and self.operacion not in OPERACIONES_CON_PAPELERA:
-            raise ValueError(
-                "'papelera' solo aplica a las operaciones 'borrar' o 'dedup'"
-            )
+            raise ValueError("'papelera' solo aplica a las operaciones 'borrar' o 'dedup'")
         if self.operacion in OPERACIONES_IA:
             # En acciones IA no tienen sentido destino/sufijo/papelera.
             if self.destino is not None:
-                raise ValueError(
-                    f"'destino' no aplica a la operación '{self.operacion}'"
-                )
+                raise ValueError(f"'destino' no aplica a la operación '{self.operacion}'")
             if self.sufijo is not None:
-                raise ValueError(
-                    f"'sufijo' no aplica a la operación '{self.operacion}'"
-                )
+                raise ValueError(f"'sufijo' no aplica a la operación '{self.operacion}'")
             # `modelo` es OBLIGATORIO en acciones IA (mensaje con campo exacto).
             if self.modelo is None:
-                raise ValueError(
-                    f"'modelo' es obligatorio cuando operacion='{self.operacion}'"
-                )
+                raise ValueError(f"'modelo' es obligatorio cuando operacion='{self.operacion}'")
         elif self.modelo is not None or self.prompt is not None:
             raise ValueError(
                 "'modelo'/'prompt' solo aplican a operaciones IA "

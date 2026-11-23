@@ -22,7 +22,8 @@ def test_simular_muestra_el_plan_sin_tocar_nada(
     antes = instantanea(carpeta_pruebas)
 
     resultado = llamar(
-        runner, ["ejecutar", "mover-imagenes", str(carpeta_pruebas), "--simular"],
+        runner,
+        ["ejecutar", "mover-imagenes", str(carpeta_pruebas), "--simular"],
         config=config_valida,
     )
     salida = salida_normalizada(resultado.output)
@@ -40,12 +41,11 @@ def test_simular_muestra_el_plan_sin_tocar_nada(
 # --------------------------------------------------------------------------- #
 # Camino feliz: ejecución real con --si
 # --------------------------------------------------------------------------- #
-def test_si_mueve_las_imagenes_de_verdad(
-    runner: CliRunner, carpeta_pruebas, config_valida
-) -> None:
+def test_si_mueve_las_imagenes_de_verdad(runner: CliRunner, carpeta_pruebas, config_valida) -> None:
     """`--si` ejecuta sin preguntar: las imágenes acaban en imagenes/."""
     resultado = llamar(
-        runner, ["ejecutar", "mover-imagenes", str(carpeta_pruebas), "--si"],
+        runner,
+        ["ejecutar", "mover-imagenes", str(carpeta_pruebas), "--si"],
         config=config_valida,
     )
 
@@ -59,9 +59,7 @@ def test_si_mueve_las_imagenes_de_verdad(
     # Los ficheros que no casan con los patrones se quedan donde estaban.
     assert (carpeta_pruebas / "informe.pdf").is_file()
     # El contenido se conserva íntegro tras el movimiento.
-    assert (carpeta_pruebas / "imagenes" / "foto.png").read_bytes() == (
-        b"contenido de foto.png"
-    )
+    assert (carpeta_pruebas / "imagenes" / "foto.png").read_bytes() == (b"contenido de foto.png")
 
 
 def test_si_borra_temporales(runner: CliRunner, carpeta_pruebas, config_valida) -> None:
@@ -69,7 +67,8 @@ def test_si_borra_temporales(runner: CliRunner, carpeta_pruebas, config_valida) 
     (carpeta_pruebas / "basura.tmp").write_text("x", encoding="utf-8")
 
     resultado = llamar(
-        runner, ["ejecutar", "borrar-temporales", str(carpeta_pruebas), "--si"],
+        runner,
+        ["ejecutar", "borrar-temporales", str(carpeta_pruebas), "--si"],
         config=config_valida,
     )
 
@@ -80,12 +79,11 @@ def test_si_borra_temporales(runner: CliRunner, carpeta_pruebas, config_valida) 
     assert (carpeta_pruebas / "informe.pdf").is_file()
 
 
-def test_si_renombra_con_sufijo(
-    runner: CliRunner, carpeta_pruebas, config_valida
-) -> None:
+def test_si_renombra_con_sufijo(runner: CliRunner, carpeta_pruebas, config_valida) -> None:
     """La operación 'renombrar' añade el sufijo antes de la extensión."""
     resultado = llamar(
-        runner, ["ejecutar", "renombrar-viejos", str(carpeta_pruebas), "--si"],
+        runner,
+        ["ejecutar", "renombrar-viejos", str(carpeta_pruebas), "--si"],
         config=config_valida,
     )
 
@@ -100,7 +98,8 @@ def test_es_no_recursivo_con_ordenar_documentos(
 ) -> None:
     """Las acciones solo actúan sobre el primer nivel, no entran en subcarpetas."""
     resultado = llamar(
-        runner, ["ejecutar", "ordenar-documentos", str(carpeta_pruebas), "--si"],
+        runner,
+        ["ejecutar", "ordenar-documentos", str(carpeta_pruebas), "--si"],
         config=config_valida,
     )
 
@@ -122,7 +121,8 @@ def test_sin_tty_y_sin_si_se_niega_y_sale_2(
     monkeypatch.setattr("limpiador.cli._stdin_interactivo", lambda: False)
 
     resultado = llamar(
-        runner, ["ejecutar", "mover-imagenes", str(carpeta_pruebas)],
+        runner,
+        ["ejecutar", "mover-imagenes", str(carpeta_pruebas)],
         config=config_valida,
     )
     salida = salida_normalizada(resultado.output)
@@ -141,7 +141,8 @@ def test_confirmacion_afirmativa_ejecuta(
     monkeypatch.setattr("limpiador.cli._stdin_interactivo", lambda: True)
 
     resultado = llamar(
-        runner, ["ejecutar", "mover-imagenes", str(carpeta_pruebas)],
+        runner,
+        ["ejecutar", "mover-imagenes", str(carpeta_pruebas)],
         config=config_valida,
         entrada="s\n",
     )
@@ -158,7 +159,8 @@ def test_confirmacion_negativa_no_toca_nada(
     antes = instantanea(carpeta_pruebas)
 
     resultado = llamar(
-        runner, ["ejecutar", "mover-imagenes", str(carpeta_pruebas)],
+        runner,
+        ["ejecutar", "mover-imagenes", str(carpeta_pruebas)],
         config=config_valida,
         entrada="n\n",
     )
@@ -197,7 +199,8 @@ def test_no_sigue_enlaces_simbolicos_fuera_de_la_carpeta(
     (objetivo / "foto.png").symlink_to(fuera)
 
     resultado = llamar(
-        runner, ["ejecutar", "mover-imagenes", str(objetivo), "--si"],
+        runner,
+        ["ejecutar", "mover-imagenes", str(objetivo), "--si"],
         config=config_valida,
     )
 
@@ -216,7 +219,8 @@ def test_accion_inexistente_muestra_error_y_alternativas(
 ) -> None:
     """Si la acción no existe, error claro + lista de acciones válidas."""
     resultado = llamar(
-        runner, ["ejecutar", "no-existe", str(carpeta_pruebas), "--simular"],
+        runner,
+        ["ejecutar", "no-existe", str(carpeta_pruebas), "--simular"],
         config=config_valida,
     )
     salida = salida_normalizada(resultado.output)
@@ -230,14 +234,13 @@ def test_accion_inexistente_muestra_error_y_alternativas(
 # --------------------------------------------------------------------------- #
 # Caso feo 3: carpeta inexistente al ejecutar
 # --------------------------------------------------------------------------- #
-def test_carpeta_inexistente_al_ejecutar(
-    runner: CliRunner, tmp_path, config_valida
-) -> None:
+def test_carpeta_inexistente_al_ejecutar(runner: CliRunner, tmp_path, config_valida) -> None:
     """Si la carpeta objetivo no existe, error claro y código 1."""
     ruta_falsa = tmp_path / "jamas-existio"
 
     resultado = llamar(
-        runner, ["ejecutar", "mover-imagenes", str(ruta_falsa), "--si"],
+        runner,
+        ["ejecutar", "mover-imagenes", str(ruta_falsa), "--si"],
         config=config_valida,
     )
     salida = salida_normalizada(resultado.output)

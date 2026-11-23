@@ -87,7 +87,8 @@ def test_papelera_borrar_mueve_en_vez_de_borrar(
     (objetivo / "datos.tmp").write_bytes(b"contenido importante")
 
     resultado = llamar(
-        runner, ["ejecutar", "borrar-con-papelera", str(objetivo), "--si"],
+        runner,
+        ["ejecutar", "borrar-con-papelera", str(objetivo), "--si"],
         config=config_papelera,
     )
     salida = salida_normalizada(resultado.output)
@@ -122,7 +123,8 @@ def test_deshacer_restaura_ruta_original(
     objetivo.mkdir()
     (objetivo / "datos.tmp").write_bytes(b"contenido importante")
     llamar(
-        runner, ["ejecutar", "borrar-con-papelera", str(objetivo), "--si"],
+        runner,
+        ["ejecutar", "borrar-con-papelera", str(objetivo), "--si"],
         config=config_papelera,
     )
     assert not (objetivo / "datos.tmp").exists()
@@ -147,7 +149,8 @@ def test_deshacer_revierte_tambien_un_mover(
     objetivo.mkdir()
     (objetivo / "foto.png").write_bytes(b"pixeles")
     llamar(
-        runner, ["ejecutar", "mover-imagenes", str(objetivo), "--si"],
+        runner,
+        ["ejecutar", "mover-imagenes", str(objetivo), "--si"],
         config=config_valida,
     )
     assert (objetivo / "imagenes" / "foto.png").is_file()
@@ -173,7 +176,8 @@ def test_deshacer_no_sobrescribe_si_existe(
     objetivo.mkdir()
     (objetivo / "datos.tmp").write_bytes(b"original")
     llamar(
-        runner, ["ejecutar", "borrar-con-papelera", str(objetivo), "--si"],
+        runner,
+        ["ejecutar", "borrar-con-papelera", str(objetivo), "--si"],
         config=config_papelera,
     )
     # El usuario crea de nuevo un datos.tmp DIFFERENTE mientras tanto.
@@ -218,7 +222,8 @@ def test_deshacer_borrado_definitivo_no_es_reversible(
     objetivo.mkdir()
     (objetivo / "viejo.bak").write_bytes(b"basura")
     llamar(
-        runner, ["ejecutar", "borrar-definitivo", str(objetivo), "--si"],
+        runner,
+        ["ejecutar", "borrar-definitivo", str(objetivo), "--si"],
         config=config_papelera,
     )
     assert not (objetivo / "viejo.bak").exists()
@@ -239,7 +244,8 @@ def test_deshacer_n_inexistente_sale_1(
     objetivo.mkdir()
     (objetivo / "datos.tmp").write_bytes(b"x")
     llamar(
-        runner, ["ejecutar", "borrar-con-papelera", str(objetivo), "--si"],
+        runner,
+        ["ejecutar", "borrar-con-papelera", str(objetivo), "--si"],
         config=config_papelera,
     )
 
@@ -261,7 +267,8 @@ def test_papelera_dir_personalizada(
     (objetivo / "servidor.log").write_bytes(b"log")
 
     llamar(
-        runner, ["ejecutar", "papelera-personal", str(objetivo), "--si"],
+        runner,
+        ["ejecutar", "papelera-personal", str(objetivo), "--si"],
         config=config_papelera,
     )
     archivados = _contenidos_papelera(objetivo / "copia-seguridad")
@@ -341,7 +348,8 @@ def test_dedup_mueve_duplicados_a_papelera_y_deshacer_restaura(
     (objetivo / "unico.dat").write_bytes(b"otro contenido")
 
     resultado = llamar(
-        runner, ["ejecutar", "quitar-duplicados", str(objetivo), "--si"],
+        runner,
+        ["ejecutar", "quitar-duplicados", str(objetivo), "--si"],
         config=config_papelera,
     )
 
@@ -371,7 +379,8 @@ def test_simular_papelera_no_crea_nada(
     antes = instantanea(objetivo)
 
     resultado = llamar(
-        runner, ["ejecutar", "borrar-con-papelera", str(objetivo), "--simular"],
+        runner,
+        ["ejecutar", "borrar-con-papelera", str(objetivo), "--simular"],
         config=config_papelera,
     )
     salida = salida_normalizada(resultado.output)

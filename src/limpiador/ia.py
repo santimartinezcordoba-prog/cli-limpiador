@@ -222,8 +222,15 @@ class CentroIA:
         fabrica: _FabricaCliente = crudo  # type: ignore[assignment]
         return fabrica
 
-    def __init__(self, *, key: str | None, base_url: str, modelo: str, timeout: float,
-                 ca_bundle: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        key: str | None,
+        base_url: str,
+        modelo: str,
+        timeout: float,
+        ca_bundle: str | None = None,
+    ) -> None:
         self._key = key
         self._base_url = base_url
         self._modelo = modelo

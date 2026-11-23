@@ -88,9 +88,7 @@ def test_listar_muestra_nombre_tipo_tamano_y_fecha(
     assert "Modificado" in salida
 
 
-def test_listar_no_modifica_nada(
-    runner: CliRunner, carpeta_pruebas: Path
-) -> None:
+def test_listar_no_modifica_nada(runner: CliRunner, carpeta_pruebas: Path) -> None:
     """`listar` es de solo lectura: el contenido de la carpeta es idéntico."""
     antes = instantanea(carpeta_pruebas)
 
@@ -100,9 +98,7 @@ def test_listar_no_modifica_nada(
     assert instantanea(carpeta_pruebas) == antes
 
 
-def test_listar_carpeta_inexistente_da_error_claro(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_listar_carpeta_inexistente_da_error_claro(runner: CliRunner, tmp_path: Path) -> None:
     """Caso feo 3: una carpeta que no existe debe dar error claro y código 1."""
     ruta_falsa = tmp_path / "no-existe"
 

@@ -50,9 +50,7 @@ def tabla_ficheros(carpeta: Path, ficheros: list[Path]) -> Table:
 
 def tabla_acciones(config_version: int, acciones: list[Accion]) -> Table:
     """Tabla resumen de las acciones del fichero de configuración."""
-    tabla = Table(
-        title=f"Acciones definidas (config v{config_version})", title_style="bold cyan"
-    )
+    tabla = Table(title=f"Acciones definidas (config v{config_version})", title_style="bold cyan")
     tabla.add_column("Nombre", style="bold")
     tabla.add_column("Operación")
     tabla.add_column("Patrones", overflow="fold")

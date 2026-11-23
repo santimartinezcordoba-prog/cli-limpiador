@@ -52,14 +52,54 @@ ETIQUETAS_CLASIFICAR: Final[tuple[str, ...]] = (
 
 # Palabras clave por etiqueta para la heurística offline (orden = prioridad).
 _CLAVES_POR_ETIQUETA: Final[dict[str, tuple[str, ...]]] = {
-    "codigo": ("def ", "class ", "import ", "función", "funcion", "return",
-               "console.", "public ", "private ", "#include", "<html", "print("),
-    "datos": ("timestamp", "usuario", "fecha", "hora", "valor", "registro",
-              "email", "id,", ",", ";"),
-    "informes": ("informe", "conclusión", "conclusion", "objetivo", "resultado",
-                 "introducción", "introduccion", "memoria"),
-    "apuntes": ("tema", "apuntes", "examen", "resumen", "capítulo", "capitulo",
-                "lección", "leccion", "concepto", "define"),
+    "codigo": (
+        "def ",
+        "class ",
+        "import ",
+        "función",
+        "funcion",
+        "return",
+        "console.",
+        "public ",
+        "private ",
+        "#include",
+        "<html",
+        "print(",
+    ),
+    "datos": (
+        "timestamp",
+        "usuario",
+        "fecha",
+        "hora",
+        "valor",
+        "registro",
+        "email",
+        "id,",
+        ",",
+        ";",
+    ),
+    "informes": (
+        "informe",
+        "conclusión",
+        "conclusion",
+        "objetivo",
+        "resultado",
+        "introducción",
+        "introduccion",
+        "memoria",
+    ),
+    "apuntes": (
+        "tema",
+        "apuntes",
+        "examen",
+        "resumen",
+        "capítulo",
+        "capitulo",
+        "lección",
+        "leccion",
+        "concepto",
+        "define",
+    ),
 }
 _EXTENSIONES_ETIQUETA: Final[dict[str, tuple[str, ...]]] = {
     "codigo": (".py", ".js", ".ts", ".java", ".c", ".cpp", ".go", ".rs", ".html", ".css"),
@@ -101,9 +141,7 @@ class IAccion(Protocol):
 # --------------------------------------------------------------------------- #
 # Planificación (para --simular): no llama al centro ni escribe.
 # --------------------------------------------------------------------------- #
-def planificar_ia(
-    accion: Accion, raiz: Path, objetivos: list[Path]
-) -> list[Operacion]:
+def planificar_ia(accion: Accion, raiz: Path, objetivos: list[Path]) -> list[Operacion]:
     """Plan de una acción IA sobre `objetivos`, sin escribir ni llamar a la IA."""
     plan: list[Operacion] = []
     for origen in objetivos:
@@ -239,9 +277,11 @@ def ejecutar_resumir(
     for origen in objetivos:
         texto = leer_texto(origen)
         contenido, offline, motivo = _intentar(
-            lambda t=texto: centro.completar(
-                _prompt_resumir(t, accion), modelo=accion.modelo, max_tokens=512
-            ).contenido,
+            lambda t=texto: (
+                centro.completar(
+                    _prompt_resumir(t, accion), modelo=accion.modelo, max_tokens=512
+                ).contenido
+            ),
             estricto=accion.modo_offline == "estricto",
         )
         if offline:
@@ -252,8 +292,7 @@ def ejecutar_resumir(
         destino.parent.mkdir(parents=True, exist_ok=True)
         destino.write_text(_cabecera_resumen(origen, contenido, offline), encoding="utf-8")
         bitacora.append(
-            f"[modo offline] resumen de {origen.name} -> "
-            + f"{destino.relative_to(raiz)}"
+            f"[modo offline] resumen de {origen.name} -> " + f"{destino.relative_to(raiz)}"
             if offline
             else f"resumen de {origen.name} -> {destino.relative_to(raiz)}"
         )
@@ -282,9 +321,11 @@ def ejecutar_clasificar(
     for origen in objetivos:
         texto = leer_texto(origen)
         respuesta, offline, motivo = _intentar(
-            lambda n=origen.name, t=texto: centro.completar(
-                _prompt_clasificar(n, t, accion), modelo=accion.modelo, max_tokens=16
-            ).contenido,
+            lambda n=origen.name, t=texto: (
+                centro.completar(
+                    _prompt_clasificar(n, t, accion), modelo=accion.modelo, max_tokens=16
+                ).contenido
+            ),
             estricto=accion.modo_offline == "estricto",
         )
         if offline:

@@ -140,15 +140,11 @@ def doctor() -> None:
     )
     for dependencia in ("typer", "rich", "pydantic"):
         try:
-            comprobaciones.append(
-                (True, dependencia, importlib.metadata.version(dependencia))
-            )
+            comprobaciones.append((True, dependencia, importlib.metadata.version(dependencia)))
         except importlib.metadata.PackageNotFoundError:
             comprobaciones.append((False, dependencia, "no instalada"))
     try:
-        comprobaciones.append(
-            (True, "limpiador", importlib.metadata.version("limpiador"))
-        )
+        comprobaciones.append((True, "limpiador", importlib.metadata.version("limpiador")))
     except importlib.metadata.PackageNotFoundError:
         comprobaciones.append((False, "limpiador", "no instalada como paquete"))
 
@@ -170,9 +166,7 @@ def listar(
 ) -> None:
     """Muestra una tabla con nombre, tipo, tamaño y fecha de cada fichero."""
     _resolver_carpeta_o_salir(carpeta)
-    entradas = sorted(
-        (e for e in carpeta.iterdir() if not e.is_dir()), key=lambda e: e.name
-    )
+    entradas = sorted((e for e in carpeta.iterdir() if not e.is_dir()), key=lambda e: e.name)
     if not entradas:
         console.print(f"La carpeta '[bold]{carpeta}[/]' no contiene ficheros.")
         return
@@ -292,8 +286,7 @@ def ejecutar_accion(
     if not si:
         if not _stdin_interactivo():
             console.print(
-                "[red]✗ Sin terminal interactivo la ejecución requiere --si "
-                "(o usa --simular).[/]"
+                "[red]✗ Sin terminal interactivo la ejecución requiere --si (o usa --simular).[/]"
             )
             raise typer.Exit(EXIT_SIN_CONFIRMAR)
         _pedir_confirmacion_o_salir(nombre, carpeta, plan)
@@ -312,8 +305,7 @@ def ejecutar_accion(
     console.print(f"[bold green]Acción '{nombre}' ejecutada.[/]")
     if ruta_manifiesto is not None:
         console.print(
-            f"[dim]Manifiesto: {ruta_manifiesto} — "
-            "puedes revertirlo con 'limpiador deshacer'.[/]"
+            f"[dim]Manifiesto: {ruta_manifiesto} — puedes revertirlo con 'limpiador deshacer'.[/]"
         )
 
 
@@ -392,9 +384,7 @@ def comprobar_ia(
                     "key": "presente" if resultado.tiene_key else "ausente",
                     "modelo": resultado.modelo,
                     "latencia_s": (
-                        round(resultado.latencia_s, 3)
-                        if resultado.latencia_s is not None
-                        else None
+                        round(resultado.latencia_s, 3) if resultado.latencia_s is not None else None
                     ),
                     "detalle": resultado.detalle,
                 },
@@ -408,8 +398,7 @@ def comprobar_ia(
         if resultado.estado == COMPROBACION_OK:
             assert resultado.latencia_s is not None
             console.print(
-                f"[green]✓ ok[/] — el centro respondió en "
-                f"[bold]{resultado.latencia_s:.2f} s[/]."
+                f"[green]✓ ok[/] — el centro respondió en [bold]{resultado.latencia_s:.2f} s[/]."
             )
         elif resultado.estado == COMPROBACION_SIN_KEY:
             console.print(
@@ -453,8 +442,7 @@ def _ejecutar_ia_o_salir(
     if not si:
         if not _stdin_interactivo():
             console.print(
-                "[red]✗ Sin terminal interactivo la ejecución requiere --si "
-                "(o usa --simular).[/]"
+                "[red]✗ Sin terminal interactivo la ejecución requiere --si (o usa --simular).[/]"
             )
             return EXIT_SIN_CONFIRMAR
         try:

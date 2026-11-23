@@ -51,9 +51,7 @@ def ficheros_versionados(raiz: Path = RAIZ_REPO) -> list[Path]:
     return [raiz / parte for parte in salida.stdout.split("\0") if parte]
 
 
-def escanear(
-    raiz: Path = RAIZ_REPO, exonerar: bool = True
-) -> list[str]:
+def escanear(raiz: Path = RAIZ_REPO, exonerar: bool = True) -> list[str]:
     """Lista `ruta:línea: pista` por cada posible fuga encontrada.
 
     Con `exonerar=False` se escanea TODO, incluidos los ficheros del propio

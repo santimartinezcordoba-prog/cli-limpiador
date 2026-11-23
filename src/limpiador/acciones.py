@@ -64,9 +64,7 @@ class Operacion:
             return f"{self.tipo} {self.origen.name} -> {self.destino}"
         destino = self.destino_path
         if self.tipo in {"borrar", "dedup"}:  # destino dentro de la papelera
-            ruta = "/".join(
-                (destino.parent.parent.name, destino.parent.name, destino.name)
-            )
+            ruta = "/".join((destino.parent.parent.name, destino.parent.name, destino.name))
             etiqueta = "borrar (papelera)" if self.tipo == "borrar" else "dedup (papelera)"
             return f"{etiqueta} {self.origen.name} -> {ruta}"
         carpeta = destino.parent.name
@@ -79,9 +77,7 @@ def buscar_accion(config: Config, nombre: str) -> Accion:
         if accion.nombre == nombre:
             return accion
     disponibles = ", ".join(a.nombre for a in config.acciones)
-    raise AccionError(
-        f"no existe la acción '{nombre}'. Acciones disponibles: {disponibles}"
-    )
+    raise AccionError(f"no existe la acción '{nombre}'. Acciones disponibles: {disponibles}")
 
 
 def _comprobar_carpeta(carpeta: Path) -> Path:
@@ -155,9 +151,7 @@ def ficheros_que_coinciden(accion: Accion, raiz: Path) -> list[Path]:
     return sorted(encontrados)
 
 
-def _operaciones_a_papelera(
-    tipo: str, origenes: list[Path], papelera_dir: Path
-) -> list[Operacion]:
+def _operaciones_a_papelera(tipo: str, origenes: list[Path], papelera_dir: Path) -> list[Operacion]:
     """Plan de movimientos a `<papelera>/<marca-temporal>/` sin colisiones."""
     plan: list[Operacion] = []
     simulados: set[Path] = set()
@@ -250,9 +244,7 @@ def _destino_libre_simulado(destino: Path, ya_planificados: set[Path]) -> Path:
     raise AccionError(f"demasiadas colisiones de nombre para '{destino.name}'")
 
 
-def ejecutar(
-    accion: Accion, carpeta: Path, plan: list[Operacion]
-) -> tuple[list[str], Path | None]:
+def ejecutar(accion: Accion, carpeta: Path, plan: list[Operacion]) -> tuple[list[str], Path | None]:
     """Aplica el plan calculado por `planificar`.
 
     Devuelve (bitácora, ruta_del_manifiesto). El manifiesto se escribe en
@@ -268,16 +260,11 @@ def ejecutar(
         # Las acciones IA no tienen plan que aplicar: quien escribe es
         # `acciones_ia.ejecutar_*` (llamado desde la CLI). Llegar aquí por
         # accidente usaría `destino` (una etiqueta) como ruta: se corta.
-        raise AccionError(
-            "las acciones IA se ejecutan con el motor de IA, no con el plan"
-        )
+        raise AccionError("las acciones IA se ejecutan con el motor de IA, no con el plan")
     for operacion in plan:
         if not _esta_dentro(operacion.origen, raiz):
             raise AccionError(f"'{operacion.origen}' queda fuera de '{raiz}'")
-        if (
-            isinstance(operacion.destino, Path)
-            and not _esta_dentro(operacion.destino, raiz)
-        ):
+        if isinstance(operacion.destino, Path) and not _esta_dentro(operacion.destino, raiz):
             raise AccionError(f"el destino '{operacion.destino}' queda fuera de '{raiz}'")
 
         if operacion.tipo == "borrar" and operacion.destino is None:

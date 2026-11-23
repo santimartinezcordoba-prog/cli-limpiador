@@ -161,9 +161,7 @@ def test_accion_ia_resumir_modo_offline(
     monkeypatch.setenv("LIMPIADOR_IA_KEY", CLAVE_FALSA)
     inyectar_red(monkeypatch, exc=httpx.ConnectTimeout("el centro no contesta"))
     ruta, carpeta = accion_ia(tmp_path, CONFIG_IA_RESUMEN)
-    resultado = llamar(
-        runner, ["ejecutar", "resumir-notas", str(carpeta), "--si"], config=ruta
-    )
+    resultado = llamar(runner, ["ejecutar", "resumir-notas", str(carpeta), "--si"], config=ruta)
     assert resultado.exit_code == 4
     assert "modo offline" in salida_normalizada(resultado.output)
     resumen = (carpeta / "resumenes" / "resumen-apuntes.md").read_text(encoding="utf-8")
@@ -183,9 +181,7 @@ def test_accion_ia_clasificar_modo_offline(
     """
     monkeypatch.delenv("LIMPIADOR_IA_KEY", raising=False)  # ni siquiera key
     ruta, carpeta = accion_ia(tmp_path, CONFIG_IA_CLASIFICAR)
-    resultado = llamar(
-        runner, ["ejecutar", "clasificar-textos", str(carpeta), "--si"], config=ruta
-    )
+    resultado = llamar(runner, ["ejecutar", "clasificar-textos", str(carpeta), "--si"], config=ruta)
     assert resultado.exit_code == 4
     assert (carpeta / "codigo" / "script.py").exists()
     assert (carpeta / "apuntes" / "apuntes.txt").exists()
@@ -209,9 +205,7 @@ def test_accion_ia_offline_log_sin_clave(
         exc=httpx.ConnectError(f"Authorization: Bearer {CLAVE_FALSA} rechazada"),
     )
     ruta, carpeta = accion_ia(tmp_path, CONFIG_IA_RESUMEN)
-    resultado = llamar(
-        runner, ["ejecutar", "resumir-notas", str(carpeta), "--si"], config=ruta
-    )
+    resultado = llamar(runner, ["ejecutar", "resumir-notas", str(carpeta), "--si"], config=ruta)
     assert resultado.exit_code == 4
     assert CLAVE_FALSA not in resultado.output
     log = (carpeta / "resumenes" / "log_ia.md").read_text(encoding="utf-8")
@@ -232,9 +226,7 @@ def test_accion_ia_sin_key_sin_red_local(
     # Sin inyectar nada: si el motor intentara httpx real, fallaría de otra
     # forma (DNS) o colgaría; aquí exigimos exactamente el camino offline.
     ruta, carpeta = accion_ia(tmp_path, CONFIG_IA_RESUMEN)
-    resultado = llamar(
-        runner, ["ejecutar", "resumir-notas", str(carpeta), "--si"], config=ruta
-    )
+    resultado = llamar(runner, ["ejecutar", "resumir-notas", str(carpeta), "--si"], config=ruta)
     assert resultado.exit_code == 4
     assert (carpeta / "resumenes" / "resumen-apuntes.md").exists()
 
@@ -251,9 +243,7 @@ def test_accion_ia_camino_feliz_con_mock(
     monkeypatch.setenv("LIMPIADOR_IA_KEY", CLAVE_FALSA)
     inyectar_red(monkeypatch, respuesta=respuesta_chat("La célula es la unidad de la vida."))
     ruta, carpeta = accion_ia(tmp_path, CONFIG_IA_RESUMEN)
-    resultado = llamar(
-        runner, ["ejecutar", "resumir-notas", str(carpeta), "--si"], config=ruta
-    )
+    resultado = llamar(runner, ["ejecutar", "resumir-notas", str(carpeta), "--si"], config=ruta)
     assert resultado.exit_code == 0
     resumen = (carpeta / "resumenes" / "resumen-apuntes.md").read_text(encoding="utf-8")
     assert "célula" in resumen
@@ -273,9 +263,7 @@ def test_accion_ia_estricto_falla_sin_degradar(
     config = dict(CONFIG_IA_RESUMEN)
     config["modo_offline"] = "estricto"
     ruta, carpeta = accion_ia(tmp_path, config)
-    resultado = llamar(
-        runner, ["ejecutar", "resumir-notas", str(carpeta), "--si"], config=ruta
-    )
+    resultado = llamar(runner, ["ejecutar", "resumir-notas", str(carpeta), "--si"], config=ruta)
     assert resultado.exit_code == 1
     assert "centro caído" in salida_normalizada(resultado.output)
     assert not (carpeta / "resumenes").exists()  # en estricto no escribe
@@ -363,9 +351,7 @@ def test_listar_y_acciones_incluyen_ia(runner: CliRunner, tmp_path: Path) -> Non
     assert "clasificar-ficheros" in resultado.output
 
 
-def test_simular_accion_ia_no_escribe_nada(
-    runner: CliRunner, tmp_path: Path
-) -> None:
+def test_simular_accion_ia_no_escribe_nada(runner: CliRunner, tmp_path: Path) -> None:
     """Aserta que `--simular` de una acción IA no escribe NADA en el disco.
 
     Importa porque la promesa de `--simular` (probada con hash para las
