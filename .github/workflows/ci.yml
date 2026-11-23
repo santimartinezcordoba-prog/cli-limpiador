@@ -171,8 +171,9 @@ jobs:
           if echo "$salida" | grep -Eiq 'sk-[a-z0-9]{8,}'; then
             echo "comprobar-ia FILTRÓ una clave"; exit 1
           fi
-          limpiador comprobar-ia; estado=$?
-          test "$estado" -eq 3 || { echo "exit esperado 3, obtenido $estado"; exit 1; }
+          estado=0
+          limpiador comprobar-ia || estado=$?
+          test "${estado:-0}" -eq 3 || { echo "exit esperado 3, obtenido ${estado:-0}"; exit 1; }
 
       # Con el acciones.json de ejemplo del repo (config de ejemplo):
       # validar debe salir 0 y `--simular` no puede tocar el disco.
