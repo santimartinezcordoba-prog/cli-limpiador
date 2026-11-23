@@ -1,4 +1,4 @@
-# ADR-0.002 — IA como acción opcional: modo sin red + redacción de secretos
+# ADR-0002 — IA como acción opcional: modo sin red + redacción de secretos
 
 - Estado: Aceptado
 - Fecha: 2026-11-18 (semana 3)

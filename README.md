@@ -217,6 +217,22 @@ adáptalo. Estructura:
       "operacion": "renombrar",
       "patrones": ["*.txt"],
       "sufijo": "revisar"
+    },
+    {
+      "nombre": "resumir-apuntes",
+      "descripcion": "Resume los apuntes .md/.txt con la IA del centro (offline: heurística)",
+      "operacion": "resumir-texto",
+      "patrones": ["*.md", "*.txt"],
+      "modelo": "Qwen38-DualSpark-low",
+      "modo_offline": "heuristica"
+    },
+    {
+      "nombre": "clasificar-carpeta",
+      "descripcion": "Clasifica por contenido en codigo/, datos/, apuntes/, informes/",
+      "operacion": "clasificar-ficheros",
+      "patrones": ["*"],
+      "modelo": "Qwen38-DualSpark-low",
+      "modo_offline": "estricto"
     }
   ]
 }
@@ -307,7 +323,10 @@ Ramas usadas: `feature/estructura-base`, `feature/cli-typer`,
 `feature/test-hash-simular`, `feature/ci-instalacion-limpia`,
 `feature/docs-auditoria` y, para la v1.1.1: `feature/validar-mensajes-exactos`,
 `feature/cobertura-pytest`, `feature/ci-lint-test-smoke` y
-`feature/docs-readme-auditoria`.
+`feature/docs-readme-auditoria`. Para la v1.2.0 (semana 3), en orden de merge:
+`feature/mcp-context7`, `feature/motor-ia-offline`, `feature/comprobar-ia`,
+`feature/secretos-higiene`, `feature/skill-ia`, `feature/adr-0002` y
+`feature/docs-ia`.
 
 ## Release
 
@@ -318,9 +337,9 @@ Ramas usadas: `feature/estructura-base`, `feature/cli-typer`,
 
 ```bash
 git checkout main && git pull
-git tag v1.1.1
-git push origin v1.1.1
-gh release create v1.1.1 --title "limpiador v1.1.1" --notes-file CHANGELOG.md
+git tag v1.2.0
+git push origin v1.2.0
+gh release create v1.2.0 --title "limpiador v1.2.0" --notes-file CHANGELOG.md
 ```
 
 ## Licencia

@@ -7,6 +7,55 @@ y el proyecto admite [versionado semántico](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-23
+
+Semana 3: IA opcional con modo sin red, redacción de secretos y MCP de
+documentación apagado por defecto.
+
+### Añadido
+
+- MCP `context7` en `opencode.json` con `"enabled": false`: apagado por
+  defecto, se enciende con `/mcps` solo para consultar la doc de `httpx`.
+  Ayuda de desarrollo, no dependencia runtime (ADR-0002).
+- Dos acciones IA en el motor (`resumir-texto` y `clasificar-ficheros`) que
+  hablan con el centro vía httpx 0.28 y **degradan a heurística local** si no
+  hay key o falla la conexión (aviso `[modo offline]`, exit `4`). Campos de
+  config `modelo` (obligatorio en IA), `prompt` y `modo_offline`
+  (`heuristica`/`estricto`).
+- `limpiador comprobar-ia`: smoke test del centro (key presente/ausente sin
+  imprimirla, ping con timeout, latencia) con `--json`; exit `0` ok,
+  `3` sin key, `4` sin red.
+- `limpiador.secretos.redact()`: enmascara `sk-…`, `Bearer …` y la key exacta
+  en toda salida y en el log de auditoría `log_ia.md`; carga de `.env`
+  (`LIMPIADOR_IA_KEY` y compañía) sin librerías extra.
+- Job CI `secret-scan` (escanea ficheros versionados y bloquea el merge si se
+  filtra una key) + smoke de `comprobar-ia` (exit 3, cero filtraciones).
+- Tests offline de la semana 3 (`tests/test_ia.py`, `tests/test_secretos.py`):
+  `comprobar-ia` sin key/sin red/ok, acciones IA en modo offline y estricto,
+  validación de `modelo`/`modo_offline`, `redact` (sk-, Bearer, asignación,
+  idempotencia), `test_no_hay_claves_en_repo`, `test_redacta_clave_en_error`
+  y `test_forma_obsoleta_proxies_falla`. Todos con `tmp_path` y
+  monkeypatch: nunca red real.
+- Skill `docs/skills/acciones-json.md` actualizada con los tipos IA y ejemplo
+  `acciones.json` de 3 acciones (2 de IA); README con secciones «IA»,
+  «comprobar-ia» y «MCP context7» y auditoría de tests ampliada.
+- ADR-0002: IA como acción opcional — modo sin red, redacción de secretos y
+  obsolescencia httpx 0.28 detectada con el MCP.
+
+### Cambiado
+
+- Cliente httpx migrado a la forma correcta de 0.28 tras auditar con
+  `context7`: `proxies={...}` está **eliminado** en 0.28 (deprecated en 0.26);
+  se usa `base_url` + `httpx.Timeout(...)` + `follow_redirects`, y `proxy=` o
+  `mounts=` si algún día hiciera falta proxy. El `verify=False` del borrador
+  se sustituye por CA bundle (`LIMPIADOR_CA_BUNDLE`) o verificación por
+  defecto.
+- `errores.py`: nuevo código `4` (`EXIT_OFFLINE`, completado en modo
+  degradado) y reutilización del `3` en `comprobar-ia` para «sin key».
+- Whitelist de operaciones ampliada con `resumir-texto` y
+  `clasificar-ficheros`; `.gitignore` refuerza la exclusión de `.env*`
+  (excepto `.env.example`).
+
 ## [1.1.1] - 2026-11-09
 
 ### Añadido
