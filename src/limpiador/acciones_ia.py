@@ -6,7 +6,7 @@ Diseño (mantiene la separación lógica / interfaz):
   `(bitacora, exit_code, ruta_log)` para que la CLI solo decore. Por eso se
   testa sin CLI y sin red.
 - Usa el centro vía `limpiador.ia.CentroIA` (httpx 0.28; la auditoría
-  `proxies`→`proxy`/`mounts` está documentada allí y en el ADR-0.002). Si no
+  `proxies`→`proxy`/`mounts` está documentada allí y en el ADR-0002). Si no
   hay key o falla la conexión, la acción NO peta: degrada a heurística local y
   devuelve `EXIT_OFFLINE` (4).
 - Todo texto que sale a consola o log pasa por `redact`, incluida la clave que

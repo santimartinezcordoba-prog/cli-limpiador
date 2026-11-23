@@ -17,9 +17,9 @@ contrato (exit codes, validación, seguridad) se erosiona.
 2. Errores y exit codes centralizados (`errores.py`).
 3. Cada decisión estructural se registra en `docs/adr/NNNN-*.md` con el
    formato Contexto → Decisión → Consecuencias.
-4. ADR-0.002 (este número, con punto, es el que citan los comentarios del
+4. ADR-0002 (este número, con punto, es el que citan los comentarios del
    código de IA): decisión de la semana 3 sobre IA opcional, modo sin red
-   y redacción de secretos. Ver `docs/adr/0.002-…`.
+   y redacción de secretos. Ver `docs/adr/0002-…`.
 
 ## Consecuencias
 

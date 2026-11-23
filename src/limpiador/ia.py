@@ -4,7 +4,7 @@ Este módulo es la ÚNICA capa que toca la red. El motor de acciones
 (`limpiador.acciones_ia`) llama a `CentroIA` y nunca a `httpx` directamente, de
 modo que la lógica de negocio se testa sin Typer y sin conexión real.
 
-Forma correcta en httpx 0.28 (auditada con el MCP context7, ver ADR-0.002):
+Forma correcta en httpx 0.28 (auditada con el MCP context7, ver ADR-0002):
     httpx.Client(base_url=..., timeout=httpx.Timeout(...), follow_redirects=True)
 
 # obsoleto en httpx 0.28: `httpx.Client(proxies={...})` se ELIMINÓ. `proxies`
