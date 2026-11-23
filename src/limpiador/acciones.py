@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from limpiador.config import Accion, Config
+from limpiador.config import OPERACIONES_IA, Accion, Config
 from limpiador.papelera import (
     EntradaManifiesto,
     base_papelera,
@@ -32,25 +32,45 @@ class AccionError(Exception):
 
 @dataclass(frozen=True)
 class Operacion:
-    """Un paso concreto: actuar sobre `origen` moviéndolo/renombrando a `destino`."""
+    """Un paso concreto: actuar sobre `origen` moviéndolo/renombrando a `destino`.
+
+    Para las operaciones de fichero `destino` es un `Path`. Las acciones IA
+    (`resumir-texto`, `clasificar-ficheros`) lo reutilizan para guardar una
+    etiqueta legible (p. ej. `resumen/resumen-notas.md`), por eso es `Any`.
+    """
 
     tipo: str
     origen: Path
-    destino: Path | None = None
+    destino: Path | str | None = None
+
+    @property
+    def es_ia(self) -> bool:
+        """True si la operación es IA: `destino` es etiqueta, no ruta a mover."""
+        return self.tipo in OPERACIONES_IA
+
+    @property
+    def destino_path(self) -> Path:
+        """`destino` como `Path` (solo para operaciones de fichero)."""
+        assert isinstance(self.destino, Path)
+        return self.destino
 
     @property
     def descripcion(self) -> str:
         if self.tipo == "borrar" and self.destino is None:
             return f"borrar {self.origen.name}"
         assert self.destino is not None
+        # Acciones IA: `destino` es una etiqueta de salida, no una ruta a mover.
+        if self.es_ia:
+            return f"{self.tipo} {self.origen.name} -> {self.destino}"
+        destino = self.destino_path
         if self.tipo in {"borrar", "dedup"}:  # destino dentro de la papelera
             ruta = "/".join(
-                (self.destino.parent.parent.name, self.destino.parent.name, self.destino.name)
+                (destino.parent.parent.name, destino.parent.name, destino.name)
             )
             etiqueta = "borrar (papelera)" if self.tipo == "borrar" else "dedup (papelera)"
             return f"{etiqueta} {self.origen.name} -> {ruta}"
-        carpeta = self.destino.parent.name
-        return f"{self.tipo} {self.origen.name} -> {carpeta}/{self.destino.name}"
+        carpeta = destino.parent.name
+        return f"{self.tipo} {self.origen.name} -> {carpeta}/{destino.name}"
 
 
 def buscar_accion(config: Config, nombre: str) -> Accion:
@@ -66,6 +86,11 @@ def buscar_accion(config: Config, nombre: str) -> Accion:
 
 def _comprobar_carpeta(carpeta: Path) -> Path:
     """Resuelve y valida la carpeta objetivo. Nunca devuelve la raíz del sistema."""
+    return comprobar_carpeta_resuelta(carpeta)[1]
+
+
+def comprobar_carpeta_resuelta(carpeta: Path) -> tuple[Path, Path]:
+    """`(carpeta_original, resuelta)` validada; se reutiliza para no resolver dos veces."""
     if not carpeta.exists():
         raise AccionError(f"la carpeta '{carpeta}' no existe")
     if not carpeta.is_dir():
@@ -73,7 +98,7 @@ def _comprobar_carpeta(carpeta: Path) -> Path:
     resuelta = carpeta.resolve()
     if resuelta == Path(resuelta.anchor):
         raise AccionError("se ha indicado la carpeta raíz del sistema; elige otra carpeta")
-    return resuelta
+    return carpeta, resuelta
 
 
 def _esta_dentro(ruta: Path, raiz: Path) -> bool:
@@ -109,7 +134,7 @@ def _destino_libre(destino: Path) -> Path:
     raise AccionError(f"demasiadas colisiones de nombre para '{destino.name}'")
 
 
-def _ficheros_que_coinciden(accion: Accion, raiz: Path) -> list[Path]:
+def ficheros_que_coinciden(accion: Accion, raiz: Path) -> list[Path]:
     """Ficheros de `raiz` que casan con los patrones de la acción.
 
     Reglas de seguridad:
@@ -160,8 +185,20 @@ def _duplicados_sobrantes(objetivos: list[Path]) -> list[Path]:
 
 def planificar(accion: Accion, carpeta: Path) -> list[Operacion]:
     """Calcula qué haría la acción sin tocar nada (modo `--simular`)."""
-    raiz = _comprobar_carpeta(carpeta)
-    objetivos = _ficheros_que_coinciden(accion, raiz)
+    _, raiz = comprobar_carpeta_resuelta(carpeta)
+    objetivos = ficheros_que_coinciden(accion, raiz)
+    return planificar_desde_objetivos(accion, raiz, objetivos)
+
+
+def planificar_desde_objetivos(
+    accion: Accion, raiz: Path, objetivos: list[Path]
+) -> list[Operacion]:
+    """Igual que `planificar` pero con la carpeta ya validada y los objetivos
+    contados: lo usan las acciones IA para no resolver/globbea dos veces."""
+    if accion.operacion in OPERACIONES_IA:
+        from limpiador import acciones_ia  # lazy: evita ciclos y peso de red
+
+        return acciones_ia.planificar_ia(accion, raiz, objetivos)
 
     if accion.operacion == "borrar":
         if accion.papelera:
@@ -227,10 +264,20 @@ def ejecutar(
     papelera_base = base_papelera(accion, raiz)
     bitacora: list[str] = []
     entradas: list[EntradaManifiesto] = []
+    if plan and all(operacion.es_ia for operacion in plan):
+        # Las acciones IA no tienen plan que aplicar: quien escribe es
+        # `acciones_ia.ejecutar_*` (llamado desde la CLI). Llegar aquí por
+        # accidente usaría `destino` (una etiqueta) como ruta: se corta.
+        raise AccionError(
+            "las acciones IA se ejecutan con el motor de IA, no con el plan"
+        )
     for operacion in plan:
         if not _esta_dentro(operacion.origen, raiz):
             raise AccionError(f"'{operacion.origen}' queda fuera de '{raiz}'")
-        if operacion.destino is not None and not _esta_dentro(operacion.destino, raiz):
+        if (
+            isinstance(operacion.destino, Path)
+            and not _esta_dentro(operacion.destino, raiz)
+        ):
             raise AccionError(f"el destino '{operacion.destino}' queda fuera de '{raiz}'")
 
         if operacion.tipo == "borrar" and operacion.destino is None:
@@ -239,9 +286,9 @@ def ejecutar(
             entradas.append(EntradaManifiesto(operacion.origen, None))
         elif operacion.tipo in {"borrar", "dedup"}:
             # Borrar con papelera / dedup: mover en vez de destruir.
-            assert operacion.destino is not None
-            operacion.destino.parent.mkdir(parents=True, exist_ok=True)
-            destino_final = _destino_libre(operacion.destino)
+            destino_previsto = operacion.destino_path
+            destino_previsto.parent.mkdir(parents=True, exist_ok=True)
+            destino_final = _destino_libre(destino_previsto)
             operacion.origen.replace(destino_final)
             etiqueta = "a papelera" if operacion.tipo == "borrar" else "duplicado a papelera"
             bitacora.append(
@@ -250,9 +297,9 @@ def ejecutar(
             )
             entradas.append(EntradaManifiesto(operacion.origen, destino_final))
         elif operacion.tipo == "mover":
-            assert operacion.destino is not None
-            operacion.destino.parent.mkdir(parents=True, exist_ok=True)
-            destino_final = _destino_libre(operacion.destino)
+            destino_previsto = operacion.destino_path
+            destino_previsto.parent.mkdir(parents=True, exist_ok=True)
+            destino_final = _destino_libre(destino_previsto)
             operacion.origen.replace(destino_final)
             bitacora.append(
                 f"movido {operacion.origen.name} -> "
@@ -260,8 +307,7 @@ def ejecutar(
             )
             entradas.append(EntradaManifiesto(operacion.origen, destino_final))
         elif operacion.tipo == "renombrar":
-            assert operacion.destino is not None
-            destino_final = _destino_libre(operacion.destino)
+            destino_final = _destino_libre(operacion.destino_path)
             operacion.origen.replace(destino_final)
             bitacora.append(f"renombrado {operacion.origen.name} -> {destino_final.name}")
             entradas.append(EntradaManifiesto(operacion.origen, destino_final))
