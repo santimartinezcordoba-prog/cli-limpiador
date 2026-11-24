@@ -7,6 +7,15 @@ y el proyecto admite [versionado semántico](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Cambiado
+
+- README: secciones explícitas «IA», «comprobar-ia» y «MCP context7» (apagado
+  por defecto, para doc de httpx), códigos de salida ampliados (3 sin key en
+  `comprobar-ia`, 4 degradado), tabla de campos con `modelo`/`prompt`/
+  `modo_offline` y auditoría de tests completa de la semana 3. La v1.2.0 ya
+  documentaba todo esto en el CHANGELOG y la skill; el README queda
+  coherente con ellas.
+
 ## [1.2.0] - 2026-11-23
 
 Semana 3: IA opcional con modo sin red, redacción de secretos y MCP de
