@@ -119,7 +119,7 @@ enlaces simbólicos y nunca sobrescriben ficheros (añaden sufijos `-1`, `-2`…
 
 ### Papelera y `deshacer` (borrado reversible)
 
-Una acción `borrar` o `dedup` puede activar la papelera:
+Por ejemplo, se puede añadir una acción `borrar` con papelera:
 
 ```json
 { "nombre": "borrar-temporales", "operacion": "borrar", "patrones": ["*.tmp"], "papelera": true }
@@ -322,10 +322,10 @@ adáptalo. Estructura:
       "destino": "imagenes"
     },
     {
-      "nombre": "borrar-temporales",
-      "descripcion": "Borra ficheros temporales .tmp (a la papelera: reversible)",
-      "operacion": "borrar",
-      "patrones": ["*.tmp"],
+      "nombre": "archivar-imagenes-duplicadas",
+      "descripcion": "Conserva una imagen de cada contenido y archiva duplicados",
+      "operacion": "dedup",
+      "patrones": ["*.png", "*.jpg", "*.jpeg", "*.webp"],
       "papelera": true
     },
     {
@@ -383,19 +383,19 @@ El fichero 'acciones.json' no es válido:
 ### Uso end-to-end (de cero a deshacer)
 
 ```bash
-# 1) "init": copia el ejemplo del repo y activa la papelera en el borrado
+# 1) Prepara la carpeta y copia la configuración del repositorio
 mkdir -p ~/pruebas-tareas
 cp acciones.json ~/pruebas-tareas/acciones.json
-#    (en "borrar-temporales" ya viene "papelera": true de serie)
+#    Pon imágenes de prueba duplicadas en ~/pruebas-tareas
 
 # 2) validar: la config debe pasar antes de tocar nada (exit 3 si no)
 limpiador --config ~/pruebas-tareas/acciones.json validar
 
 # 3) simular sin modificar los archivos de trabajo
-limpiador --config ~/pruebas-tareas/acciones.json ejecutar borrar-temporales ~/pruebas-tareas --simular
+limpiador --config ~/pruebas-tareas/acciones.json ejecutar archivar-imagenes-duplicadas ~/pruebas-tareas --simular
 
-# 4) ejecutar de verdad: los .tmp viajan a papelera/<marca>/ + manifiesto
-limpiador --config ~/pruebas-tareas/acciones.json ejecutar borrar-temporales ~/pruebas-tareas --si
+# 4) ejecutar: las imágenes duplicadas viajan a la papelera con manifiesto
+limpiador --config ~/pruebas-tareas/acciones.json ejecutar archivar-imagenes-duplicadas ~/pruebas-tareas --si
 
 # 5) te has asustado: deshacer devuelve todo a su sitio
 limpiador deshacer --carpeta ~/pruebas-tareas

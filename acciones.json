@@ -5,28 +5,45 @@
       "nombre": "mover-imagenes",
       "descripcion": "Mueve imágenes a una carpeta imagenes/",
       "operacion": "mover",
-      "patrones": ["*.png", "*.jpg", "*.jpeg", "*.webp"],
+      "patrones": [
+        "*.png",
+        "*.jpg",
+        "*.jpeg",
+        "*.webp"
+      ],
       "destino": "imagenes"
     },
     {
-      "nombre": "borrar-temporales",
-      "descripcion": "Borra ficheros temporales .tmp moviéndolos a la papelera (reversible)",
-      "operacion": "borrar",
-      "patrones": ["*.tmp"],
-      "papelera": true
+      "nombre": "agrupar-audio",
+      "descripcion": "Organiza archivos de audio en la carpeta audio/",
+      "operacion": "mover",
+      "patrones": [
+        "*.mp3",
+        "*.wav",
+        "*.flac",
+        "*.ogg"
+      ],
+      "destino": "audio"
     },
     {
-      "nombre": "ordenar-documentos",
-      "descripcion": "Mueve PDF y DOCX a documentos/",
-      "operacion": "mover",
-      "patrones": ["*.pdf", "*.docx"],
-      "destino": "documentos"
+      "nombre": "archivar-imagenes-duplicadas",
+      "descripcion": "Conserva una copia de cada imagen y envía los duplicados a la papelera",
+      "operacion": "dedup",
+      "patrones": [
+        "*.png",
+        "*.jpg",
+        "*.jpeg",
+        "*.webp"
+      ],
+      "papelera": true
     },
     {
       "nombre": "renombrar-viejos",
       "descripcion": "Añade el sufijo -revisar a los .txt para revisarlos",
       "operacion": "renombrar",
-      "patrones": ["*.txt"],
+      "patrones": [
+        "*.txt"
+      ],
       "sufijo": "revisar"
     }
   ]
