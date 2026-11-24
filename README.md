@@ -82,6 +82,10 @@ limpiador ejecutar mover-imagenes ./pruebas --si
 limpiador deshacer
 limpiador deshacer 2
 
+# Smoke test de la IA del centro (exit: 0 ok, 3 sin key, 4 sin red)
+limpiador comprobar-ia
+limpiador comprobar-ia --json
+
 # Usar otro fichero de acciones (opción global --config)
 limpiador --config ./acciones-personales.json listar ./pruebas
 limpiador --config ./acciones-personales.json ejecutar borrar-cachés ./pruebas --simular
@@ -130,7 +134,89 @@ contenido; el manifiesto convierte la papelera en un historial reversible.
 | `0`    | Correcto (incluye simulación, cancelación voluntaria y `deshacer` OK). |
 | `1`    | Acción/carpeta inexistente, fallo al ejecutar, o `deshacer` sin manifiesto / operación no reversible. |
 | `2`    | Falta confirmación (sin TTY y sin `--si`) o flags incompatibles. |
-| `3`    | `acciones.json` inválido (con `validar --json`, errores estructurados). |
+| `3`    | `acciones.json` inválido (con `validar --json`, errores estructurados). Con `comprobar-ia`: key ausente. |
+| `4`    | Completado en modo degradado (`EXIT_OFFLINE`): acción IA resuelta con heurística local, o `comprobar-ia` sin red. |
+
+### IA (`resumir-texto` y `clasificar-ficheros`)
+
+Desde la v1.2.0 el motor conoce dos acciones IA propias (whitelist ampliada;
+el resto de reglas —carpeta objetivo, sin `..`, sin sobrescribir— siguen
+vigentes) y el vocabulario completo documentado en la skill
+[`docs/skills/acciones-json.md`](docs/skills/acciones-json.md)
+(`resumir`, `renombrar-ia`, `clasificar-ia`; hoy implementados
+`resumir-texto` y `clasificar-ficheros`):
+
+- **`resumir-texto`**: lee los `.md`/`.txt` que casen con `patrones` y escribe
+  el resumen (del centro o de la heurística) en `<nombre>.resumen.md` junto al
+  original. `--simular` no escribe nada.
+- **`clasificar-ficheros`**: mueve cada fichero a una subcarpeta según su
+  tema (respuesta del centro, o extensión/palabras clave si degrada).
+
+Campos nuevos en el JSON: `modelo` (obligatorio en acciones IA; si falta,
+`validar` sale 3 con `'modelo' es obligatorio…`), `prompt` (opcional) y
+`modo_offline` (`heuristica`, por defecto → degrada con exit 4; `estricto` →
+sin red la acción falla con exit 1 en lugar de degradar).
+
+**La API KEY nunca se hardcodea ni se commitea**: va en `.env` (ya ignorado) o
+en el entorno. Variables reconocidas: `LIMPIADOR_IA_KEY` (obligatoria para la
+vía online), `LIMPIADOR_IA_URL`, `LIMPIADOR_IA_MODELO` y `LIMPIADOR_CA_BUNDLE`
+(el centro usa certificado auto-firmado: se pasa la ruta del CA en lugar de
+desactivar la verificación TLS).
+
+```ini
+# .env (ignoradísimo por git; jamás lo comitees)
+LIMPIADOR_IA_KEY=sk-…
+LIMPIADOR_IA_URL=https://tu-centro/llmapi/v1
+LIMPIADOR_IA_MODELO=Qwen38-DualSpark-low
+```
+
+**Sin dejar a nadie tirado sin red**: si falta la key o falla la conexión
+(timeout, 503, error de red), la acción NO peta — aplica heurística local
+(resumen = primeras N frases + longitud; clasificación = por
+extensión/palabras clave), muestra el aviso `[modo offline]` y termina con
+exit `4`. La heurística es determinista: sin red, `limpiador` sigue siendo
+útil y reproducible.
+
+**Sin filtrar la clave**: todo lo que se imprime o se loguea pasa por
+`limpiador.secretos.redact()`, que enmascara patrones `sk-…`, `Bearer …`,
+`Basic …` y la key exacta. El log de auditoría de las acciones IA
+(`resumenes/log_ia.md`) también queda redactado, aunque el error original
+arrastrara la key. Un test (`test_no_hay_claves_en_repo`) escanea los
+ficheros versionados y revienta si aparece cualquier patrón de key, y el job
+CI `secret-scan` repite el escaneo en cada PR: si se filtra una key, el merge
+queda bloqueado.
+
+### `comprobar-ia` (smoke test del centro)
+
+```bash
+limpiador comprobar-ia          # tabla: key presente/ausente, estado, latencia
+limpiador comprobar-ia --json   # lo mismo, parseable por scripts/CI
+```
+
+Comprueba en tres pasos, **sin imprimir la key jamás** (solo `presente` /
+`ausente`): key en el entorno/`.env` → ping mínimo al modelo con timeout →
+informe con latencia. Estados: `ok` (exit `0`), `sin_key` (exit `3`) y
+`sin_red` (exit `4`, degradado). Es el comando que la CI ejecuta sin key para
+verificar que la CLI degrada correctamente ante fallo de IA.
+
+### MCP context7 (apagado por defecto, solo para doc de `httpx`)
+
+`opencode.json` configura el MCP `context7` (`type: remote`) con
+`"enabled": false`: **no carga por defecto** ni gasta tokens en cada sesión.
+Se enciende puntualmente con `/mcps` → `context7`, SOLO para consultar la
+documentación oficial de `httpx`, y se vuelve a apagar. Es una ayuda de
+desarrollo, **no una dependencia runtime** de `limpiador` (ADR-0002).
+
+Auditoría que hizo (con el MCP encendido, contra la doc oficial de httpx):
+`httpx.Client(proxies={...})` fue deprecated en 0.26 y está **eliminado** en
+0.28 (`TypeError: unexpected keyword argument 'proxies'`); la forma viva es
+`proxy=` / `mounts=`. Además, `verify=False` es válido sintácticamente pero
+inseguro: la forma correcta es `verify=<ruta-al-CA>`. El código de red de
+`limpiador` usa la forma auditada (`base_url` + `httpx.Timeout` +
+`follow_redirects` + CA bundle) y el test
+`test_forma_obsoleta_proxies_falla` fija en ejecución que reintroducir
+`proxies=` rompe: si alguien vuelve a ponerla, la suite lo detecta.
+
 
 ### Seguridad: amenazas y mitigaciones
 
@@ -138,10 +224,13 @@ contenido; el manifiesto convierte la papelera en un historial reversible.
 | ------- | ---------- | ------------------ |
 | Borrado sorpresa por un patrón mal escrito | `--simular` obligatorio por cultura + confirmación `s/N`; sin TTY, exit 2 y nada se ejecuta | `test_simular_no_toca_disco_hash_identico`, `test_sin_tty_y_sin_si_se_niega_y_sale_2` |
 | Error humano ya ejecutado | Papelera + manifiesto reversible + `deshacer` (nunca sobrescribe: `.restaurado`) | `test_papelera_borrar_mueve_en_vez_de_borrar`, `test_deshacer_restaura_ruta_original`, `test_deshacer_no_sobrescribe_si_existe` |
-| Operaciones arbitrarias (chmod, exec…) | Whitelist pydantic: solo `mover`, `borrar`, `renombrar`, `dedup`; todo lo demás falla la validación con exit 3 | `test_validar_operacion_no_soportada` |
+| Operaciones arbitrarias (chmod, exec…) | Whitelist pydantic: `mover`, `borrar`, `renombrar`, `dedup` + `resumir-texto`/`clasificar-ficheros`; todo lo demás falla la validación con exit 3 | `test_validar_operacion_no_soportada`, `test_validar_camino_feliz_ia` |
 | Path traversal / escapar de la carpeta (`../`, absolutas, `~`, enlaces) | `es_ruta_segura` en patrones/destinos/papelera + contención con `resolve()`; enlaces simbólicos se ignoran | `test_patron_con_path_traversal`, `test_destino_con_path_traversal`, `test_papelera_path_traversal_se_rechaza`, `test_no_sigue_enlaces_simbolicos_fuera_de_la_carpeta` |
 | Sobrescribir datos existentes | Colisiones → sufijos `-1`, `-2`…; al deshacer → `.restaurado` y aviso | `test_deshacer_no_sobrescribe_si_existe` |
 | Ficheros fuera de la carpeta objetivo | Planificación y ejecución rechazan cualquier ruta que, tras `resolve()`, quede fuera | `test_no_sigue_enlaces_simbolicos_fuera_de_la_carpeta` |
+| Filtración de la API key (logs, errores, salida, repo) | `redact()` enmascara `sk-…`/`Bearer …`/key exacta antes de imprimir o loguear; `.env` ignorado; escáner en test y CI | `test_no_hay_claves_en_repo`, `test_redacta_clave_en_error`, `test_error_de_centro_sale_redactado`, `test_sin_key_es_sin_red_error_inmediato`, `test_accion_ia_offline_log_sin_clave`, `test_comprobar_ia_sin_key_texto_sin_clave` |
+| IA indisponible (sin key / sin red / centro caído) | Degradación a heurística local determinista con aviso `[modo offline]` y exit 4; `estricto` no degrada; `comprobar-ia` lo diagnostica | `test_comprobar_ia_sin_key`, `test_comprobar_ia_sin_red`, `test_accion_ia_resumir_modo_offline`, `test_accion_ia_clasificar_modo_offline`, `test_accion_ia_estricto_falla_sin_degradar` |
+| API obsoleta de httpx (rotura silenciosa al subir 0.28) | Cliente migrado a `base_url`+`httpx.Timeout`+`follow_redirects`+CA bundle; el test ejecuta la forma muerta y aserta el `TypeError` | `test_forma_obsoleta_proxies_falla` |
 
 ### Auditoría de tests
 
@@ -157,7 +246,7 @@ aserción fallara, la garantía correspondiente deja de ser cierta.
 | `test_acciones_lista_todas_las_acciones_con_descripcion` | `acciones` imprime los 3 nombres del JSON y su descripción | El usuario ve lo que puede ejecutar antes de ejecutar nada. |
 | `test_validar_ok` | JSON correcto → salida 0 y «válido» | El camino feliz no puede dar falsos negativos. |
 | `test_validar_json_mal_formado` | JSON corrupto → exit 3 + «JSON inválido» con línea y columna | Un typo en el JSON debe detectarse, no ejecutarse «a medias». |
-| `test_validar_operacion_no_soportada` | exit 3 + `acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup)` | La whitelist se aplica al validar, con índice y campo exactos. |
+| `test_validar_operacion_no_soportada` | exit 3 + `acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup, resumir-texto, clasificar-ficheros)` | La whitelist se aplica al validar, con índice y campo exactos. |
 | `test_validar_mover_sin_destino` | exit 3 + `acciones[0].destino: campo requerido ('destino' es obligatorio cuando operacion='mover')` | Coherencia entre campos: un `mover` sin destino es una bomba de relojería. |
 | `test_validar_json_flag_con_errores` | `--json` devuelve TODOS los errores como array y sale 3 | Auditoría automatizable: un script puede exigir `valido: true`. |
 | `test_simular_no_toca_disco_hash_identico` (parametrizado por operación) | SHA256 del árbol (rutas+contenidos) idéntico antes/después de `--simular` + «simulación»/«no se ha modificado» en la salida | Prueba empírica estrella: `--simular` no escribe ni un byte. |
@@ -171,6 +260,20 @@ aserción fallara, la garantía correspondiente deja de ser cierta.
 | `test_papelera_path_traversal_se_rechazada`* | `papelera: "../huida"` → exit 3 (campo exacto) | La papelera tampoco puede escribir fuera de la carpeta. |
 | `test_dedup_mueve_duplicados_a_papelera_y_deshacer_restaura` | Dedup SHA256 deja uno, archiva el duplicado y `deshacer` lo devuelve | La operación nueva también nace reversible. |
 | `test_accion_inexistente_muestra_error_y_alternativas` | exit 1 + lista de acciones válidas | Los errores enseñan a usar la herramienta. |
+| `test_comprobar_ia_sin_key` | Sin `LIMPIADOR_IA_KEY`: exit 3, estado `sin_key`, key `ausente` y la salida NO contiene `sk-` | Diagnóstico honesto sin red ni credenciales; garantiza cero filtraciones en el mensaje de error. |
+| `test_comprobar_ia_sin_red` | Con `ConnectError` parcheado: exit 4 (degradado) y estado `sin_red` | Distingue «falta la key» de «no hay conexión» con códigos distintos; nada cuelga la CLI (timeout corto). |
+| `test_comprobar_ia_ok` | Con cliente mock: exit 0, estado `ok` y latencia numérica | El camino feliz del smoke funciona: no todo es degradación. |
+| `test_accion_ia_resumir_modo_offline` | Sin red: `resumir-texto` termina con exit 4, escribe `<nombre>.resumen.md` heurístico y avisa `[modo offline]` | «Sin dejar a nadie tirado sin red»: la acción produce resultado útil aunque el centro esté caído. |
+| `test_accion_ia_clasificar_modo_offline` | Sin red: `clasificar-ficheros` termina con exit 4 y crea subcarpetas por extensión/palabras clave | La heurística de clasificación es determinista y respeta la contención en la carpeta objetivo. |
+| `test_accion_ia_offline_log_sin_clave` | El error simulado LLEVA la key incrustada; ni la salida ni `resumenes/log_ia.md` la contienen | Prueba la redacción justo donde más duele: el log de auditoría de una degradación. |
+| `test_accion_ia_estricto_falla_sin_degradar` | `modo_offline: "estricto"` sin red: exit 1 y NADA escrito | Quien exige IA real no obtiene heurística disfrazada: la política se respeta al pie de la letra. |
+| `test_accion_ia_camino_feliz_con_mock` | Con cliente mock: exit 0, resumen del «centro» escrito y log redactado | La vía online funciona end-to-end sin tocar la red (mock, no llamadas reales). |
+| `test_validar_accion_ia_sin_modelo` | Acción IA sin `modelo`: exit 3 con el campo exacto (`acciones[i]: 'modelo' es obligatorio…`) | Una acción IA sin modelo es una promesa vacía: se detecta al validar, no al ejecutar. |
+| `test_validar_modo_offline_invalido` | `modo_offline: "magia"`: exit 3 listando los valores permitidos (`heuristica`, `estricto`) | La política de degradación no se escribe a ojo: la whitelist también protege la config. |
+| `test_simular_accion_ia_no_escribe_nada` | `--simular` sobre acción IA: hash del árbol idéntico | La promesa de `--simular` (cero bytes escritos) aplica también a las acciones nuevas. |
+| `test_no_hay_claves_en_repo` | Escanea TODOS los ficheros versionados (nunca `.env`) con patrones de key: falla si aparece alguna | «Ninguna clave en el historial» como test, no como promesa: un `sk-…` en un PR rompe la suite y el CI. |
+| `test_redacta_clave_en_error` | Un error que contiene la key (una fake) sale enmascarada (`sk-****`) | La redacción funciona con la key real, no solo con patrones genéricos. |
+| `test_forma_obsoleta_proxies_falla` | `httpx.Client(proxies={...})` lanza `TypeError` en 0.28; `proxy=`/`mounts=` son la forma viva | Fija en ejecución la auditoría del MCP context7: si alguien reintroduce la API muerta, la suite lo detecta. |
 
 \* En el código: `test_papelera_path_traversal_se_rechaza`.
 
@@ -244,11 +347,14 @@ Campos de cada acción:
 | ------------- | ------------------------- | --------------------------------------------- |
 | `nombre`      | todas                     | Identificador único (lo usas en `ejecutar`).  |
 | `descripcion` | todas                     | Texto que se muestra en `limpiador acciones`. |
-| `operacion`   | todas                     | Whitelist: `mover`, `borrar`, `renombrar` o `dedup`. |
+| `operacion`   | todas                     | Whitelist: `mover`, `borrar`, `renombrar`, `dedup`, `resumir-texto` o `clasificar-ficheros`. |
 | `patrones`    | todas                     | Comodines tipo `*.png` (solo nombres, sin rutas). |
 | `destino`     | `mover`                   | Carpeta relativa dentro de la carpeta objetivo. |
 | `sufijo`      | `renombrar`               | Se añade antes de la extensión: `a.txt` → `a-SUFIJO.txt`. |
 | `papelera`    | `borrar`/`dedup` (opcional) | `true` → `<carpeta>/papelera`; `"DIR"` → `<carpeta>/DIR`. |
+| `modelo`      | IA (obligatorio)          | Modelo del centro; si falta, `validar` sale 3 con el campo exacto. |
+| `prompt`      | IA (opcional)             | Instrucción para afinar la tarea; si se omite, la acción usa su prompt por defecto. |
+| `modo_offline`| IA (opcional)             | `heuristica` (por defecto, degrada con exit 4) o `estricto` (sin red, falla con exit 1). |
 
 `limpiador validar` te dice **exactamente qué campo falla** (índice y campo
 reales, todos de golpe), por ejemplo:
@@ -256,7 +362,7 @@ reales, todos de golpe), por ejemplo:
 ```text
 El fichero 'acciones.json' no es válido:
   ✗ acciones[0].nombre: campo requerido
-  ✗ acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup)
+  ✗ acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup, resumir-texto, clasificar-ficheros)
   ✗ acciones[2]: 'destino' es obligatorio cuando operacion='mover'
 ```
 
