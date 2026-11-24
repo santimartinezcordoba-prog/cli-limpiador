@@ -67,6 +67,28 @@
       ],
       "modelo": "Qwen38-DualSpark-low",
       "modo_offline": "heuristica"
+    },
+    {
+      "nombre": "crear-preguntas-repaso",
+      "descripcion": "Crea preguntas de repaso a partir de apuntes",
+      "operacion": "preguntas-repaso",
+      "patrones": [
+        "*.md",
+        "*.txt"
+      ],
+      "modelo": "Qwen38-DualSpark-low",
+      "modo_offline": "heuristica"
+    },
+    {
+      "nombre": "extraer-tareas-pendientes",
+      "descripcion": "Extrae tareas pendientes de notas y apuntes",
+      "operacion": "extraer-tareas",
+      "patrones": [
+        "*.md",
+        "*.txt"
+      ],
+      "modelo": "Qwen38-DualSpark-low",
+      "modo_offline": "heuristica"
     }
   ]
 }

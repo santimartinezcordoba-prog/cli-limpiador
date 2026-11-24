@@ -1,4 +1,4 @@
-"""Motor de las acciones IA: `resumir-texto` y `clasificar-ficheros`.
+"""Motor de las acciones IA de resumen, clasificación, preguntas y tareas.
 
 Diseño (mantiene la separación lógica / interfaz):
 
@@ -20,6 +20,7 @@ Heurística local (modo offline, determinista):
 
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
 from datetime import datetime
@@ -28,7 +29,7 @@ from typing import TYPE_CHECKING, Final, Protocol
 
 from limpiador.acciones import Operacion
 from limpiador.errores import EXIT_OFFLINE, EXIT_OK, IAError
-from limpiador.ia import CentroIA, SinRedError
+from limpiador.ia import CentroIA, ProveedorIA, SinRedError
 from limpiador.secretos import redact
 
 if TYPE_CHECKING:  # solo tipos: evita el ciclo acciones <-> acciones_ia
@@ -103,11 +104,14 @@ def planificar_ia(
     """Plan de una acción IA sobre `objetivos`, sin escribir ni llamar a la IA."""
     plan: list[Operacion] = []
     for origen in objetivos:
-        if accion.operacion == "resumir-texto":
-            destino = f"{DIR_RESUMENES}/resumen-{origen.stem}.md"
+        texto = leer_texto(origen)
+        if accion.operacion != "clasificar-ficheros":
+            destino = f"{DIR_RESUMENES}/{_prefijo(accion.operacion)}-{origen.stem}.md"
+            instruccion = _prompt_resumir(texto, accion)
         else:
-            destino = f"{DIR_RESUMENES}/... (por contenido)"
-        plan.append(Operacion(accion.operacion, origen, destino))
+            destino = "categoría determinada por el modelo"
+            instruccion = _prompt_clasificar(origen.name, texto, accion)
+        plan.append(Operacion(accion.operacion, origen, destino, len(instruccion)))
     return plan
 
 
@@ -166,12 +170,39 @@ def clasificar_heuristica(nombre: str, texto: str) -> str:
 # --------------------------------------------------------------------------- #
 # Prompts hacia el centro.
 # --------------------------------------------------------------------------- #
+def _prefijo(operacion: str) -> str:
+    return {"preguntas-repaso": "preguntas", "extraer-tareas": "tareas"}.get(
+        operacion, "resumen"
+    )
+
+
 def _prompt_resumir(texto: str, accion: IAccion) -> str:
-    base = accion.prompt or (
+    instrucciones = {
+        "preguntas-repaso": (
+            "Crea cinco preguntas de repaso claras sobre el texto, sin inventar datos."
+        ),
+        "extraer-tareas": "Extrae tareas pendientes del texto como lista; no inventes tareas.",
+    }
+    base = accion.prompt or instrucciones.get(accion.operacion) or (
         "Resume el siguiente texto en un párrafo breve, en español, respetando "
         "las ideas clave. Termina indicando cuántas palabras tenía el original."
     )
     return f"{base}\n\n--- TEXTO ---\n{texto[:8000]}"
+
+
+def _salida_local(texto: str, operacion: str) -> str:
+    if operacion == "preguntas-repaso":
+        frases = _frases(texto)[:3]
+        if not frases:
+            return "No hay texto suficiente para proponer preguntas."
+        return "\n".join(f"- ¿Qué significa o implica: {frase[:160].strip()}?" for frase in frases)
+    if operacion == "extraer-tareas":
+        lineas = [linea.strip() for linea in texto.splitlines()
+                  if re.search(r"(?i)\b(todo|pendiente|hacer)\b|\[ \]", linea)]
+        return "\n".join(f"- {linea}" for linea in lineas[:20]) or (
+            "No se encontraron tareas marcadas como pendientes; revisa el texto."
+        )
+    return resumen_heuristico(texto)
 
 
 def _prompt_clasificar(nombre: str, texto: str, accion: IAccion) -> str:
@@ -224,14 +255,15 @@ def ejecutar_resumir(
     accion: IAccion,
     raiz: Path,
     objetivos: list[Path],
-    centro: CentroIA | None = None,
+    centro: ProveedorIA | None = None,
 ) -> tuple[list[str], int, Path | None]:
     """Escribe un resumen por fichero. Offline -> heurística + exit 4."""
     centro = centro if centro is not None else CentroIA.desde_entorno()
     bitacora: list[str] = []
     linea_log: list[str] = []
     degradado = False
-    destino_dir = raiz / DIR_RESUMENES
+    destino_dir = _directorio_seguro(raiz, DIR_RESUMENES)
+    _comprobar_log(raiz)
     for origen in objetivos:
         texto = leer_texto(origen)
         contenido, offline, motivo = _intentar(
@@ -242,30 +274,32 @@ def ejecutar_resumir(
         )
         if offline:
             degradado = True
-            contenido = resumen_heuristico(texto)
+            contenido = _salida_local(texto, accion.operacion)
             motivo = motivo or "sin conexión"
-        destino = _ruta_libre(destino_dir / f"resumen-{origen.stem}.md")
+        destino = _ruta_libre(destino_dir / f"{_prefijo(accion.operacion)}-{origen.stem}.md")
         destino.parent.mkdir(parents=True, exist_ok=True)
-        destino.write_text(_cabecera_resumen(origen, contenido, offline), encoding="utf-8")
+        _directorio_seguro(raiz, DIR_RESUMENES)
+        with destino.open("x", encoding="utf-8") as archivo:
+            archivo.write(_cabecera_resumen(origen, contenido, offline, accion.operacion))
         bitacora.append(
-            f"[modo offline] resumen de {origen.name} -> "
+            f"[modo offline] {_prefijo(accion.operacion)} de {origen.name} -> "
             + f"{destino.relative_to(raiz)}"
             if offline
-            else f"resumen de {origen.name} -> {destino.relative_to(raiz)}"
+            else f"{_prefijo(accion.operacion)} de {origen.name} -> {destino.relative_to(raiz)}"
         )
         linea_log.append(
             f"- {origen.name}: "
             + ("offline " + (motivo or "") if offline else "IA " + (accion.modelo or "centro"))
         )
     exit_code = EXIT_OFFLINE if degradado else EXIT_OK
-    return bitacora, exit_code, _escribir_log(raiz, "resumir-texto", linea_log)
+    return bitacora, exit_code, _escribir_log(raiz, accion.operacion, linea_log)
 
 
 def ejecutar_clasificar(
     accion: IAccion,
     raiz: Path,
     objetivos: list[Path],
-    centro: CentroIA | None = None,
+    centro: ProveedorIA | None = None,
 ) -> tuple[list[str], int, Path | None]:
     """Copia ficheros a subcarpetas por clase. Offline -> heurística + exit 4.
 
@@ -275,6 +309,7 @@ def ejecutar_clasificar(
     bitacora: list[str] = []
     linea_log: list[str] = []
     degradado = False
+    _comprobar_log(raiz)
     for origen in objetivos:
         texto = leer_texto(origen)
         respuesta, offline, motivo = _intentar(
@@ -289,8 +324,9 @@ def ejecutar_clasificar(
             motivo = motivo or "sin conexión"
         else:
             etiqueta = _etiqueta_desde_respuesta(respuesta)
-        destino_dir = _ruta_dentro(raiz, etiqueta)
+        destino_dir = _directorio_seguro(raiz, etiqueta)
         destino_dir.mkdir(parents=True, exist_ok=True)
+        _directorio_seguro(raiz, etiqueta)
         destino = _ruta_libre(destino_dir / origen.name)
         _copiar(origen, destino)
         bitacora.append(
@@ -310,9 +346,9 @@ def ejecutar_clasificar(
 # --------------------------------------------------------------------------- #
 # Utilidades de salida seguras.
 # --------------------------------------------------------------------------- #
-def _cabecera_resumen(origen: Path, contenido: str, offline: bool) -> str:
+def _cabecera_resumen(origen: Path, contenido: str, offline: bool, operacion: str) -> str:
     fuente = "heurística local (modo offline)" if offline else "IA del centro"
-    return f"<!-- resumen de {origen.name} vía {fuente} -->\n\n{contenido}\n"
+    return f"<!-- {_prefijo(operacion)} de {origen.name} vía {fuente} -->\n\n{contenido}\n"
 
 
 def _ruta_dentro(raiz: Path, sub: str) -> Path:
@@ -326,27 +362,45 @@ def _ruta_dentro(raiz: Path, sub: str) -> Path:
 
 
 def _ruta_libre(destino: Path) -> Path:
-    if not destino.exists():
+    if not os.path.lexists(destino):
         return destino
     for i in range(1, 10_000):
         alternativo = destino.with_name(f"{destino.stem}-{i}{destino.suffix}")
-        if not alternativo.exists():
+        if not os.path.lexists(alternativo):
             return alternativo
     raise IAError(f"demasiadas colisiones para '{destino.name}'")  # pragma: no cover
 
 
 def _copiar(origen: Path, destino: Path) -> None:
-    destino.write_bytes(origen.read_bytes())
+    with destino.open("xb") as archivo:
+        archivo.write(origen.read_bytes())
+
+
+def _directorio_seguro(raiz: Path, nombre: str) -> Path:
+    candidato = raiz / nombre
+    if candidato.is_symlink():
+        raise IAError(f"La carpeta '{nombre}' no puede ser un enlace simbólico")
+    return _ruta_dentro(raiz, nombre)
+
+
+def _comprobar_log(raiz: Path) -> Path:
+    directorio = _directorio_seguro(raiz, DIR_RESUMENES)
+    ruta = directorio / ARCHIVO_LOG
+    if ruta.is_symlink():
+        raise IAError("El log de IA no puede ser un enlace simbólico")
+    return ruta
 
 
 def _escribir_log(raiz: Path, operacion: str, lineas: list[str]) -> Path:
-    """Anexa una entrada al log de auditoría (todo el contenido, redactado)."""
-    destino_dir = raiz / DIR_RESUMENES
-    destino_dir.mkdir(parents=True, exist_ok=True)
-    ruta = destino_dir / ARCHIVO_LOG
+    """Anexa una entrada sin seguir enlaces simbólicos en el log."""
+    ruta = _comprobar_log(raiz)
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta = _comprobar_log(raiz)
     cabecera = f"\n\n## {datetime.now().isoformat(timespec='seconds')} · {operacion}\n"
     cuerpo = cabecera + "\n".join(redact(linea) for linea in lineas) + "\n"
-    with ruta.open("a", encoding="utf-8") as fichero:
+    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(ruta, flags, 0o600)
+    with os.fdopen(descriptor, "a", encoding="utf-8") as fichero:
         fichero.write(cuerpo)
     return ruta
 
@@ -378,7 +432,7 @@ def ejecutar_ia(
     accion: Accion,
     raiz: Path,
     objetivos: list[Path],
-    centro: CentroIA | None = None,
+    centro: ProveedorIA | None = None,
 ) -> tuple[list[str], int, Path | None]:
     """Despacha a la acción IA concreta. `(bitácora, exit_code, ruta_log)`.
 
@@ -387,7 +441,7 @@ def ejecutar_ia(
     (Typer/Rich) no aparece aquí: esto es motor puro y se testa sin CLI.
     """
     try:
-        if accion.operacion == "resumir-texto":
+        if accion.operacion in {"resumir-texto", "preguntas-repaso", "extraer-tareas"}:
             return ejecutar_resumir(accion, raiz, objetivos, centro)
         if accion.operacion == "clasificar-ficheros":
             return ejecutar_clasificar(accion, raiz, objetivos, centro)

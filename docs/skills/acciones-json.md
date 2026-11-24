@@ -2,7 +2,7 @@
 
 > Documento para agentes/usuarios que generan o editan el fichero de
 > acciones de `limpiador`. Describe el JSON **actual** (v1.2.0): las cuatro
-> operaciones clásicas y las dos operaciones IA disponibles, cómo se valida cada
+> operaciones clásicas y las cuatro operaciones IA disponibles, cómo se valida cada
 > tipo y qué campos son obligatorios. La versión humana de referencia es el
 > README del repo; este documento y el README se mantienen coherentes.
 
@@ -29,7 +29,7 @@
 | --------------- | ----------------------------------- | ----- |
 | `nombre`        | todas (obligatorio)                 | lo usas en `limpiador ejecutar NOMBRE` |
 | `descripcion`   | todas (obligatorio)                 | |
-| `operacion`     | todas (obligatorio)                 | whitelist: `mover`, `borrar`, `renombrar`, `dedup`, `resumir-texto`, `clasificar-ficheros` |
+| `operacion`     | todas (obligatorio)                 | whitelist: `mover`, `borrar`, `renombrar`, `dedup`, `resumir-texto`, `clasificar-ficheros`, `preguntas-repaso`, `extraer-tareas` |
 | `patrones`      | todas (obligatorio)                 | al menos 1 |
 | `destino`       | `mover` (obligatorio)               | carpeta relativa dentro de la carpeta objetivo |
 | `sufijo`        | `renombrar` (obligatorio)           | `a.txt` → `a-SUFIJO.txt` |
@@ -41,7 +41,7 @@
 ### Cómo se valida cada tipo (errores exactos que produce `validar`)
 
 - Operación fuera de whitelist:
-  `acciones[i].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup, resumir-texto, clasificar-ficheros)`.
+  `acciones[i].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup, resumir-texto, clasificar-ficheros, preguntas-repaso, extraer-tareas)`.
 - Coherencias a nivel de OBJETO (con índice real del array):
   - `acciones[i]: 'destino' es obligatorio cuando operacion='mover'`
   - `acciones[i]: 'sufijo' es obligatorio cuando operacion='renombrar'`
@@ -49,7 +49,7 @@
     (y análogo para `clasificar-ficheros`)
   - `acciones[i]: 'destino' solo aplica a la operación 'mover'` (también
     para acciones IA; lo mismo se aplica al campo `sufijo`).
-  - `acciones[i]: 'modelo'/'prompt' solo aplican a operaciones IA (clasificar-ficheros, resumir-texto)`
+  - `acciones[i]: 'modelo'/'prompt' solo aplican a operaciones IA (clasificar-ficheros, extraer-tareas, preguntas-repaso, resumir-texto)`
   - `'papelera' solo aplica a las operaciones 'borrar' o 'dedup'`
 - `modo_offline` con valor inválido:
   `acciones[i].modo_offline: valor no soportado (permitido: estricto, heuristica)`.
@@ -70,12 +70,17 @@ falla (exit 1) en vez de degradar.
   original se queda) a una subcarpeta según su CONTENIDO: `codigo/`,
   `datos/`, `apuntes/`, `informes/` o `sin-clasificar/`. Offline: palabras
   clave del contenido y, si nada casa, la extensión.
+- **`preguntas-repaso`** — genera preguntas de estudio; sin red propone preguntas
+  sencillas desde las primeras frases y señala modo offline.
+- **`extraer-tareas`** — extrae tareas; sin red solo detecta líneas marcadas con
+  TODO, pendiente, hacer o `[ ]` e indica si no encuentra ninguna.
 - **`renombrar-ia`** — TIPO DOCUMENTADO con futuro: propuesta para renombrar
   ficheros con un nombre generado por el modelo (aún NO está en la
   whitelist; si aparece en un JSON, `validar` lo rechaza con «valor no
   soportado»). Se lista aquí para que el agente conozca el vocabulario IA
   completo: `resumir`, `renombrar-ia`, `clasificar-ia` → hoy implementados,
-  dos acciones reales: `resumir-texto` y `clasificar-ficheros`.
+  cuatro operaciones reales: `resumir-texto`, `clasificar-ficheros`,
+  `preguntas-repaso` y `extraer-tareas`.
 
 ### Seguridad de las acciones IA (obligatorio al escribir configs)
 

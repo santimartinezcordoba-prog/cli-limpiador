@@ -163,32 +163,34 @@ contenido; el manifiesto convierte la papelera en un historial reversible.
 | `3`    | `acciones.json` inválido (con `validar --json`, errores estructurados). Con `comprobar-ia`: key ausente. |
 | `4`    | Completado en modo degradado (`EXIT_OFFLINE`): acción IA resuelta con heurística local, o `comprobar-ia` sin red. |
 
-### IA (`resumir-texto` y `clasificar-ficheros`)
+### Acciones con IA
 
-Desde la v1.2.0 el motor conoce dos acciones IA propias (whitelist ampliada;
-el resto de reglas —carpeta objetivo, sin `..`, sin sobrescribir— siguen
-vigentes) y el vocabulario completo documentado en la skill
-[`docs/skills/acciones-json.md`](docs/skills/acciones-json.md)
-(`resumir`, `renombrar-ia`, `clasificar-ia`; hoy implementados
-`resumir-texto` y `clasificar-ficheros`):
+`acciones.json` incluye cuatro operaciones de IA que trabajan con archivos
+`.txt` y `.md` en la carpeta indicada:
 
-- **`resumir-texto`**: lee los `.md`/`.txt` que casen con `patrones` y escribe
-  el resumen (del centro o de la heurística) en `<nombre>.resumen.md` junto al
-  original. `--simular` no modifica los archivos de trabajo.
-- **`clasificar-ficheros`**: copia cada fichero a una subcarpeta según su
-  tema (respuesta del centro, o extensión/palabras clave si degrada). El
-  fichero original permanece en su ubicación.
+- `resumir-apuntes` crea un resumen en `resumenes/resumen-<nombre>.md`.
+- `clasificar-ficheros` copia el original a una carpeta según su contenido.
+- `crear-preguntas-repaso` genera preguntas en `resumenes/preguntas-<nombre>.md`.
+- `extraer-tareas-pendientes` extrae tareas en `resumenes/tareas-<nombre>.md`.
 
-Las dos acciones IA admiten `.txt` y `.md`: aplican operaciones diferentes
-sobre los mismos archivos. Los resúmenes generados también son `.md` y pueden
-quedar incluidos en ejecuciones posteriores; revisa el plan antes de continuar.
+Las dos últimas acciones responden a las necesidades propuestas para el
+proyecto: preparar un repaso y localizar tareas en notas. Sin conexión, las
+preguntas son sugerencias basadas en las primeras frases y la extracción solo
+recoge líneas con marcas como `TODO`, `pendiente`, `hacer` o `[ ]`; no son
+resultados generados por IA. Hay que revisarlos y, si hace falta, reintentar con
+conexión. La salida indica `[modo offline]` y devuelve el código 4.
+
+`--simular` no llama al proveedor y muestra el número de caracteres de la
+instrucción que se enviaría por cada archivo. Cada acción es independiente;
+algunas aceptan los mismos archivos de entrada. Los resultados se guardan en
+subcarpetas y se mantienen los originales.
 
 Campos nuevos en el JSON: `modelo` (obligatorio en acciones IA; si falta,
 `validar` sale 3 con `'modelo' es obligatorio…`), `prompt` (opcional) y
 `modo_offline` (`heuristica`, por defecto → degrada con exit 4; `estricto` →
 sin red la acción falla con exit 1 en lugar de degradar).
 
-**La API KEY nunca se hardcodea ni se commitea**: va en `.env` (ya ignorado) o
+Copia `.env.example` a `.env` y configura allí tus valores. La clave va en `.env` (ya ignorado) o
 en el entorno. Variables reconocidas: `LIMPIADOR_IA_KEY` (obligatoria para la
 vía online), `LIMPIADOR_IA_URL`, `LIMPIADOR_IA_MODELO` y `LIMPIADOR_CA_BUNDLE`
 (el centro usa certificado auto-firmado: se pasa la ruta del CA en lugar de
@@ -255,7 +257,7 @@ inseguro: la forma correcta es `verify=<ruta-al-CA>`. El código de red de
 | ------- | ---------- | ------------------ |
 | Borrado sorpresa por un patrón mal escrito | simulación automática + confirmación `s/N`; sin TTY, exit 2 y nada se ejecuta | `test_simular_no_toca_disco_hash_identico`, `test_sin_tty_y_sin_si_se_niega_y_sale_2` |
 | Error humano ya ejecutado | Papelera + manifiesto reversible + `deshacer` (nunca sobrescribe: `.restaurado`) | `test_papelera_borrar_mueve_en_vez_de_borrar`, `test_deshacer_restaura_ruta_original`, `test_deshacer_no_sobrescribe_si_existe` |
-| Operaciones arbitrarias (chmod, exec…) | Whitelist pydantic: `mover`, `borrar`, `renombrar`, `dedup` + `resumir-texto`/`clasificar-ficheros`; todo lo demás falla la validación con exit 3 | `test_validar_operacion_no_soportada`, `test_validar_camino_feliz_ia` |
+| Operaciones arbitrarias (chmod, exec…) | Whitelist pydantic: `mover`, `borrar`, `renombrar`, `dedup` + `resumir-texto`/`clasificar-ficheros`/`preguntas-repaso`/`extraer-tareas`; todo lo demás falla la validación con exit 3 | `test_validar_operacion_no_soportada`, `test_validar_camino_feliz_ia` |
 | Path traversal / escapar de la carpeta (`../`, absolutas, `~`, enlaces) | `es_ruta_segura` en patrones/destinos/papelera + contención con `resolve()`; enlaces simbólicos se ignoran | `test_patron_con_path_traversal`, `test_destino_con_path_traversal`, `test_papelera_path_traversal_se_rechaza`, `test_no_sigue_enlaces_simbolicos_fuera_de_la_carpeta` |
 | Sobrescribir datos existentes | Colisiones → sufijos `-1`, `-2`…; al deshacer → `.restaurado` y aviso | `test_deshacer_no_sobrescribe_si_existe` |
 | Ficheros fuera de la carpeta objetivo | Planificación y ejecución rechazan cualquier ruta que, tras `resolve()`, quede fuera | `test_no_sigue_enlaces_simbolicos_fuera_de_la_carpeta` |
@@ -277,7 +279,7 @@ aserción fallara, la garantía correspondiente deja de ser cierta.
 | `test_acciones_lista_todas_las_acciones_con_descripcion` | `acciones` imprime los 3 nombres del JSON y su descripción | El usuario ve lo que puede ejecutar antes de ejecutar nada. |
 | `test_validar_ok` | JSON correcto → salida 0 y «válido» | El camino feliz no puede dar falsos negativos. |
 | `test_validar_json_mal_formado` | JSON corrupto → exit 3 + «JSON inválido» con línea y columna | Un typo en el JSON debe detectarse, no ejecutarse «a medias». |
-| `test_validar_operacion_no_soportada` | exit 3 + `acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup, resumir-texto, clasificar-ficheros)` | La whitelist se aplica al validar, con índice y campo exactos. |
+| `test_validar_operacion_no_soportada` | exit 3 + `acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup, resumir-texto, clasificar-ficheros, preguntas-repaso, extraer-tareas)` | La whitelist se aplica al validar, con índice y campo exactos. |
 | `test_validar_mover_sin_destino` | exit 3 + `acciones[0].destino: campo requerido ('destino' es obligatorio cuando operacion='mover')` | Coherencia entre campos: un `mover` sin destino es una bomba de relojería. |
 | `test_validar_json_flag_con_errores` | `--json` devuelve TODOS los errores como array y sale 3 | Auditoría automatizable: un script puede exigir `valido: true`. |
 | `test_simular_no_toca_disco_hash_identico` (parametrizado por operación) | SHA256 del árbol (rutas+contenidos) idéntico antes/después de `--simular` + «simulación»/«no se ha modificado» en la salida | El árbol de la carpeta de trabajo queda intacto. |
@@ -294,7 +296,7 @@ aserción fallara, la garantía correspondiente deja de ser cierta.
 | `test_comprobar_ia_sin_key` | Sin `LIMPIADOR_IA_KEY`: exit 3, estado `sin_key`, key `ausente` y la salida NO contiene `sk-` | Diagnóstico honesto sin red ni credenciales; garantiza cero filtraciones en el mensaje de error. |
 | `test_comprobar_ia_sin_red` | Con `ConnectError` parcheado: exit 4 (degradado) y estado `sin_red` | Distingue «falta la key» de «no hay conexión» con códigos distintos; nada cuelga la CLI (timeout corto). |
 | `test_comprobar_ia_ok` | Con cliente mock: exit 0, estado `ok` y latencia numérica | El camino feliz del smoke funciona: no todo es degradación. |
-| `test_accion_ia_resumir_modo_offline` | Sin red: `resumir-texto` termina con exit 4, escribe `<nombre>.resumen.md` heurístico y avisa `[modo offline]` | «Sin dejar a nadie tirado sin red»: la acción produce resultado útil aunque el centro esté caído. |
+| `test_accion_ia_resumir_modo_offline` | Sin red: `resumir-texto` termina con exit 4, escribe `resumenes/resumen-<nombre>.md` heurístico y avisa `[modo offline]` | «Sin dejar a nadie tirado sin red»: la acción produce resultado útil aunque el centro esté caído. |
 | `test_accion_ia_clasificar_modo_offline` | Sin red: `clasificar-ficheros` termina con exit 4 y crea subcarpetas por extensión/palabras clave | La heurística de clasificación es determinista y respeta la contención en la carpeta objetivo. |
 | `test_accion_ia_offline_log_sin_clave` | El error simulado LLEVA la key incrustada; ni la salida ni `resumenes/log_ia.md` la contienen | Prueba la redacción justo donde más duele: el log de auditoría de una degradación. |
 | `test_accion_ia_estricto_falla_sin_degradar` | `modo_offline: "estricto"` sin red: exit 1 y NADA escrito | Quien exige IA real no obtiene heurística disfrazada: la política se respeta al pie de la letra. |
@@ -378,7 +380,7 @@ Campos de cada acción:
 | ------------- | ------------------------- | --------------------------------------------- |
 | `nombre`      | todas                     | Identificador único (lo usas en `ejecutar`).  |
 | `descripcion` | todas                     | Texto que se muestra en `limpiador acciones`. |
-| `operacion`   | todas                     | Whitelist: `mover`, `borrar`, `renombrar`, `dedup`, `resumir-texto` o `clasificar-ficheros`. |
+| `operacion`   | todas                     | Whitelist: `mover`, `borrar`, `renombrar`, `dedup`, `resumir-texto`, `clasificar-ficheros`, `preguntas-repaso` o `extraer-tareas`. |
 | `patrones`    | todas                     | Comodines tipo `*.png` (solo nombres, sin rutas). |
 | `destino`     | `mover`                   | Carpeta relativa dentro de la carpeta objetivo. |
 | `sufijo`      | `renombrar`               | Se añade antes de la extensión: `a.txt` → `a-SUFIJO.txt`. |
@@ -393,7 +395,7 @@ reales, todos de golpe), por ejemplo:
 ```text
 El fichero 'acciones.json' no es válido:
   ✗ acciones[0].nombre: campo requerido
-  ✗ acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup, resumir-texto, clasificar-ficheros)
+  ✗ acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup, resumir-texto, clasificar-ficheros, preguntas-repaso, extraer-tareas)
   ✗ acciones[2]: 'destino' es obligatorio cuando operacion='mover'
 ```
 

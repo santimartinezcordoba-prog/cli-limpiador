@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import os
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
@@ -201,7 +202,17 @@ def httpx_client_apto_auditoria() -> AbstractContextManager[httpx.Client]:
     )
 
 
-class CentroIA:
+class ProveedorIA(ABC):
+    """Contrato del proveedor utilizado por las acciones."""
+
+    @abstractmethod
+    def completar(
+        self, instruccion: str, *, modelo: str | None = None, max_tokens: int = 512
+    ) -> RespuestaIA:
+        """Obtiene una respuesta o informa de que la IA no está disponible."""
+
+
+class CentroIA(ProveedorIA):
     """Fachada mínima sobre la API de chat del centro (OpenAI-compatible)."""
 
     # Punto de inyección de tests: `monkeypatch.setattr(CentroIA,
