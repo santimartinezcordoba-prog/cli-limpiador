@@ -39,12 +39,16 @@ OPERACIONES_VALIDAS: Final[tuple[str, ...]] = (
     "dedup",
     "resumir-texto",
     "clasificar-ficheros",
+    "preguntas-repaso",
+    "extraer-tareas",
 )
 
 LISTA_OPERACIONES: Final[str] = ", ".join(OPERACIONES_VALIDAS)
 
 # Operaciones que usan la IA del centro (con degradación offline).
-OPERACIONES_IA: Final[frozenset[str]] = frozenset({"resumir-texto", "clasificar-ficheros"})
+OPERACIONES_IA: Final[frozenset[str]] = frozenset(
+    {"resumir-texto", "clasificar-ficheros", "preguntas-repaso", "extraer-tareas"}
+)
 
 # Campos admitidos en cada acción (los extra se rechazan con extra="forbid").
 CAMPOS_ACEPTADOS: Final[frozenset[str]] = frozenset(

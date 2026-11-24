@@ -87,3 +87,69 @@ def test_validar_accion_ia_con_destino_muestra_regla(runner: CliRunner, tmp_path
     resultado = runner.invoke(app, ["--config", str(config), "validar"])
     assert resultado.exit_code == 3
     assert "'destino' solo aplica a la operación 'mover'" in resultado.output
+
+
+@pytest.mark.parametrize(
+    ("nombre", "prefijo", "esperado"),
+    [
+        ("crear-preguntas-repaso", "preguntas", "¿Qué significa o implica"),
+        ("extraer-tareas-pendientes", "tareas", "Pendiente: entregar ejercicios"),
+    ],
+)
+def test_nuevas_acciones_sin_red_y_simulacion(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    nombre: str, prefijo: str, esperado: str,
+) -> None:
+    from limpiador.ia import CentroIA
+
+    carpeta = tmp_path / "pruebas"
+    carpeta.mkdir()
+    (carpeta / "notas.txt").write_text(
+        "Las células contienen ADN.\nPendiente: entregar ejercicios", encoding="utf-8"
+    )
+    base = ["--config", str(CONFIG), "ejecutar", nombre, str(carpeta)]
+    def no_red(*args: object, **kwargs: object) -> None:
+        raise AssertionError("La simulación no debe contactar con el modelo")
+    with monkeypatch.context() as parche:
+        parche.setattr(CentroIA, "completar", no_red)
+        simulacion = runner.invoke(app, [*base, "--simular"])
+        assert simulacion.exit_code == 0, simulacion.output
+        assert "caracteres al modelo" in simulacion.output
+        assert not (carpeta / "resumenes").exists()
+    real = runner.invoke(app, [*base, "--si"])
+    assert real.exit_code == 4, real.output
+    contenido = (carpeta / "resumenes" / f"{prefijo}-notas.md").read_text(encoding="utf-8")
+    assert esperado in contenido
+
+
+@pytest.mark.parametrize(
+    ("nombre", "prefijo", "frase"),
+    [
+        ("crear-preguntas-repaso", "preguntas", "preguntas de repaso"),
+        ("extraer-tareas-pendientes", "tareas", "tareas pendientes"),
+    ],
+)
+def test_nuevas_acciones_con_proveedor_simulado(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    nombre: str, prefijo: str, frase: str,
+) -> None:
+    from limpiador.ia import CentroIA, RespuestaIA
+
+    carpeta = tmp_path / "pruebas"
+    carpeta.mkdir()
+    (carpeta / "notas.txt").write_text("Primera frase. Pendiente: estudiar", encoding="utf-8")
+    instrucciones: list[str] = []
+    def completar(self: object, instruccion: str, **kwargs: object) -> RespuestaIA:
+        instrucciones.append(instruccion)
+        return RespuestaIA(contenido="resultado de prueba", latencia_s=0.1)
+    monkeypatch.setattr(CentroIA, "completar", completar)
+    base = ["--config", str(CONFIG), "ejecutar", nombre, str(carpeta)]
+    sim = runner.invoke(app, [*base, "--simular"])
+    assert sim.exit_code == 0, sim.output
+    assert instrucciones == []
+    real = runner.invoke(app, [*base, "--si"])
+    assert real.exit_code == 0, real.output
+    assert len(instrucciones) == 1
+    assert frase in instrucciones[0]
+    assert f"{len(instrucciones[0])} caracteres al modelo" in sim.output
+    assert "resultado de prueba" in (carpeta / "resumenes" / f"{prefijo}-notas.md").read_text()

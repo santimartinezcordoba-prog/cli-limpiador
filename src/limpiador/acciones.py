@@ -42,6 +42,7 @@ class Operacion:
     tipo: str
     origen: Path
     destino: Path | str | None = None
+    caracteres: int | None = None
 
     @property
     def es_ia(self) -> bool:
@@ -61,7 +62,11 @@ class Operacion:
         assert self.destino is not None
         # Acciones IA: `destino` es una etiqueta de salida, no una ruta a mover.
         if self.es_ia:
-            return f"{self.tipo} {self.origen.name} -> {self.destino}"
+            detalle = (
+                f" ({self.caracteres} caracteres al modelo)"
+                if self.caracteres is not None else ""
+            )
+            return f"{self.tipo} {self.origen.name} -> {self.destino}{detalle}"
         destino = self.destino_path
         if self.tipo in {"borrar", "dedup"}:  # destino dentro de la papelera
             ruta = "/".join(
@@ -202,6 +207,8 @@ class AccionPlanificadora(ABC):
             "mover": Mover, "borrar": Borrar, "renombrar": Renombrar,
             "dedup": Deduplicar, "resumir-texto": AccionIA,
             "clasificar-ficheros": AccionIA,
+            "preguntas-repaso": AccionIA,
+            "extraer-tareas": AccionIA,
         }
         try:
             return tipos[config.operacion](config)

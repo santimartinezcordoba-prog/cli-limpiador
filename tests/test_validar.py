@@ -119,7 +119,7 @@ def test_validar_operacion_no_soportada(runner: CliRunner, tmp_path: Path) -> No
     assert (
         "acciones[1].operacion: valor no soportado "
         "(permitido: mover, borrar, renombrar, dedup, resumir-texto, "
-        "clasificar-ficheros)" in salida
+        "clasificar-ficheros, preguntas-repaso, extraer-tareas)" in salida
     )
 
 
