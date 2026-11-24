@@ -14,8 +14,8 @@ ejecuta, con simulación previa y confirmaciones de seguridad.
 - Stack: Python 3.10+, [Typer](https://typer.tiangolo.com/) (CLI),
   [Rich](https://rich.readthedocs.io/) (tablas), [pydantic](https://docs.pydantic.dev/)
   (validación), pytest, ruff, mypy.
-- 100 % segura por diseño: `--simular` no toca el disco (probado con hash),
-  sin terminal no ejecuta nada, «borrar» puede ir a una **papelera reversible**
+- La simulación no modifica los archivos de trabajo (probado con hash),
+  y la ejecución exige simulación previa y confirmación; «borrar» puede ir a una **papelera reversible**
   con `deshacer`, las operaciones están en whitelist y todo path traversal
   (`..`) se rechaza.
 
@@ -72,15 +72,15 @@ limpiador validar --json   # lo mismo, como JSON estructurado para scripts
 # Diagnóstico del entorno (Python + dependencias): sale 0 si todo vale
 limpiador doctor
 
-# Simular: muestra qué haría, sin tocar nada
-limpiador ejecutar mover-imagenes ./pruebas --simular
+# Simular: muestra qué haría sin modificar los archivos de trabajo
+limpiador ejecutar mover-imagenes ~/pruebas-tareas --simular
 
 # Ejecutar de verdad sin preguntar (para scripts; usa antes --simular)
-limpiador ejecutar mover-imagenes ./pruebas --si
+limpiador ejecutar mover-imagenes ~/pruebas-tareas --si
 
 # Deshacer: revierte la última ejecución real (1 = última, 2 = penúltima…)
-limpiador deshacer
-limpiador deshacer 2
+limpiador deshacer --carpeta ~/pruebas-tareas
+limpiador deshacer 2 --carpeta ~/pruebas-tareas
 
 # Smoke test de la IA del centro (exit: 0 ok, 3 sin key, 4 sin red)
 limpiador comprobar-ia
@@ -88,15 +88,28 @@ limpiador comprobar-ia --json
 
 # Usar otro fichero de acciones (opción global --config)
 limpiador --config ./acciones-personales.json listar ./pruebas
-limpiador --config ./acciones-personales.json ejecutar borrar-cachés ./pruebas --simular
+limpiador --config ./acciones-personales.json ejecutar borrar-cachés ~/pruebas-tareas --simular
 ```
 
 ### Reglas de seguridad de `ejecutar`
 
+Crea primero la carpeta con `mkdir -p ~/pruebas-tareas` y coloca ahí los
+archivos de prueba. Tanto `ejecutar` como `deshacer` solo aceptan esa carpeta
+o subcarpetas dentro de ella; las rutas se resuelven antes de comprobar el
+límite. `listar` sigue siendo una operación de lectura.
+
+Antes de cada ejecución real hay que simular la misma acción sobre la misma
+carpeta. La CLI guarda un comprobante de un solo uso en
+`~/.cache/limpiador/simulaciones`, fuera de la carpeta de trabajo. Si cambia
+el contenido de la carpeta o la configuración de la acción, hay que volver a
+simular. También hay que repetirla si se cancela la confirmación. En acciones
+IA, la salida final depende del modelo y el plan mostrado es orientativo.
+`--si` constituye la confirmación explícita para scripts, incluso al borrar.
+
 | Flags                 | Comportamiento                                                    |
 | --------------------- | ----------------------------------------------------------------- |
-| `--simular`           | Muestra la tabla de pasos y **no toca el disco** (exit `0`).        |
-| `--si`                | Ejecuta sin preguntar (para scripts).                             |
+| `--simular`           | Muestra el plan y no modifica la carpeta de trabajo (exit `0`).        |
+| `--si`                | Confirma la ejecución para scripts, después de simular.                             |
 | (ninguno) con terminal | Pide confirmación `s/N`. Si respondes `n`, no hace nada.         |
 | (ninguno) sin TTY     | **Se niega a ejecutar y sale con código 2** (evita sorpresas en cron/pipes). |
 
@@ -148,7 +161,7 @@ vigentes) y el vocabulario completo documentado en la skill
 
 - **`resumir-texto`**: lee los `.md`/`.txt` que casen con `patrones` y escribe
   el resumen (del centro o de la heurística) en `<nombre>.resumen.md` junto al
-  original. `--simular` no escribe nada.
+  original. `--simular` no modifica los archivos de trabajo.
 - **`clasificar-ficheros`**: copia cada fichero a una subcarpeta según su
   tema (respuesta del centro, o extensión/palabras clave si degrada). El
   fichero original permanece en su ubicación.
@@ -223,7 +236,7 @@ inseguro: la forma correcta es `verify=<ruta-al-CA>`. El código de red de
 
 | Amenaza | Mitigación | Test que lo prueba |
 | ------- | ---------- | ------------------ |
-| Borrado sorpresa por un patrón mal escrito | `--simular` obligatorio por cultura + confirmación `s/N`; sin TTY, exit 2 y nada se ejecuta | `test_simular_no_toca_disco_hash_identico`, `test_sin_tty_y_sin_si_se_niega_y_sale_2` |
+| Borrado sorpresa por un patrón mal escrito | `--simular` obligatorio + confirmación `s/N`; sin TTY, exit 2 y nada se ejecuta | `test_simular_no_toca_disco_hash_identico`, `test_sin_tty_y_sin_si_se_niega_y_sale_2` |
 | Error humano ya ejecutado | Papelera + manifiesto reversible + `deshacer` (nunca sobrescribe: `.restaurado`) | `test_papelera_borrar_mueve_en_vez_de_borrar`, `test_deshacer_restaura_ruta_original`, `test_deshacer_no_sobrescribe_si_existe` |
 | Operaciones arbitrarias (chmod, exec…) | Whitelist pydantic: `mover`, `borrar`, `renombrar`, `dedup` + `resumir-texto`/`clasificar-ficheros`; todo lo demás falla la validación con exit 3 | `test_validar_operacion_no_soportada`, `test_validar_camino_feliz_ia` |
 | Path traversal / escapar de la carpeta (`../`, absolutas, `~`, enlaces) | `es_ruta_segura` en patrones/destinos/papelera + contención con `resolve()`; enlaces simbólicos se ignoran | `test_patron_con_path_traversal`, `test_destino_con_path_traversal`, `test_papelera_path_traversal_se_rechaza`, `test_no_sigue_enlaces_simbolicos_fuera_de_la_carpeta` |
@@ -371,20 +384,21 @@ El fichero 'acciones.json' no es válido:
 
 ```bash
 # 1) "init": copia el ejemplo del repo y activa la papelera en el borrado
-cp acciones.json ./mi-carpura/acciones.json
+mkdir -p ~/pruebas-tareas
+cp acciones.json ~/pruebas-tareas/acciones.json
 #    (en "borrar-temporales" ya viene "papelera": true de serie)
 
 # 2) validar: la config debe pasar antes de tocar nada (exit 3 si no)
-limpiador --config ./mi-carpura/acciones.json validar
+limpiador --config ~/pruebas-tareas/acciones.json validar
 
-# 3) simular: tabla de pasos SIN tocar el disco
-limpiador --config ./mi-carpura/acciones.json ejecutar borrar-temporales ./mi-carpura --simular
+# 3) simular sin modificar los archivos de trabajo
+limpiador --config ~/pruebas-tareas/acciones.json ejecutar borrar-temporales ~/pruebas-tareas --simular
 
 # 4) ejecutar de verdad: los .tmp viajan a papelera/<marca>/ + manifiesto
-limpiador --config ./mi-carpura/acciones.json ejecutar borrar-temporales ./mi-carpura --si
+limpiador --config ~/pruebas-tareas/acciones.json ejecutar borrar-temporales ~/pruebas-tareas --si
 
 # 5) te has asustado: deshacer devuelve todo a su sitio
-cd ./mi-carpura && limpiador deshacer
+limpiador deshacer --carpeta ~/pruebas-tareas
 ```
 
 ## Ejecutar las pruebas

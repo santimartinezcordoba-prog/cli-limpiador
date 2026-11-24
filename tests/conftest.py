@@ -96,6 +96,17 @@ def _salida_determinista(
     ):
         monkeypatch.delenv(variable, raising=False)
     monkeypatch.chdir(tmp_path)
+    # Cada test usa una zona de prácticas y comprobantes aislados.
+    monkeypatch.setattr("limpiador.seguridad.raiz_permitida", lambda: tmp_path)
+    from limpiador import seguridad
+
+    def comprobante(accion: Any, carpeta: Path) -> Path:
+        identificador = hashlib.sha256(
+            (str(carpeta.resolve()) + "\0" + accion.nombre).encode()
+        ).hexdigest()
+        return tmp_path.parent / (tmp_path.name + "-simulaciones") / identificador
+
+    monkeypatch.setattr(seguridad, "_comprobante", comprobante)
 
 
 @pytest.fixture()
@@ -112,6 +123,9 @@ def llamar(
 ) -> Result:
     """Invoca `limpiador` añadiendo `--config` si se pasa una ruta concreta."""
     base = ["--config", str(config)] if config is not None else []
+    if args and args[0] == "ejecutar" and "--simular" not in args:
+        previos = [arg for arg in args if arg != "--si"]
+        runner.invoke(app, [*base, *previos, "--simular"])
     return runner.invoke(app, [*base, *args], input=entrada)
 
 

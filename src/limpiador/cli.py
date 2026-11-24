@@ -22,8 +22,7 @@ from rich.console import Console
 from rich.text import Text
 
 from limpiador import __version__
-from limpiador.acciones import AccionError, Operacion, buscar_accion, planificar
-from limpiador.acciones import ejecutar as ejecutar_plan
+from limpiador.acciones import AccionError, Motor, Operacion, buscar_accion
 from limpiador.config import (
     OPERACIONES_IA,
     Accion,
@@ -45,6 +44,7 @@ from limpiador.papelera import (
     resolver_papelera_cli,
 )
 from limpiador.secretos import redact
+from limpiador.seguridad import comprobar_limite, consumir_simulacion, registrar_simulacion
 from limpiador.tabla import tabla_acciones, tabla_ficheros, tabla_operaciones
 
 RESPUESTAS_AFIRMATIVAS: Final[frozenset[str]] = frozenset({"s", "si", "sí", "y", "yes"})
@@ -106,6 +106,14 @@ def _resolver_carpeta_o_salir(carpeta: Path) -> None:
     if not carpeta.is_dir():
         console.print(f"[red]✗ '{carpeta}' no es una carpeta.[/]")
         raise typer.Exit(EXIT_ERROR)
+
+
+def _comprobar_limite_o_salir(carpeta: Path) -> None:
+    try:
+        comprobar_limite(carpeta)
+    except (OSError, ValueError) as exc:
+        console.print(f"[red]✗ {redact(str(exc))}[/]")
+        raise typer.Exit(EXIT_ERROR) from exc
 
 
 def _buscar_accion_o_salir(config: Config, nombre: str) -> Accion:
@@ -256,9 +264,11 @@ def ejecutar_accion(
     config = _cargar_config_o_salir(Path(ctx.obj))
     accion = _buscar_accion_o_salir(config, nombre)
     _resolver_carpeta_o_salir(carpeta)
+    _comprobar_limite_o_salir(carpeta)
 
+    motor = Motor()
     try:
-        plan = planificar(accion, carpeta)
+        plan = motor.planificar(accion, carpeta)
     except AccionError as exc:
         console.print(f"[red]✗ {redact(str(exc))}[/]")
         raise typer.Exit(EXIT_ERROR) from exc
@@ -269,6 +279,17 @@ def ejecutar_accion(
             "No hay nada que hacer."
         )
         raise typer.Exit(EXIT_OK)
+
+    try:
+        if simular:
+            registrar_simulacion(accion, carpeta)
+        elif not consumir_simulacion(accion, carpeta):
+            console.print("[red]✗ Ejecuta --simular primero para esta acción y carpeta; "
+                          "repite la simulación si cambió su contenido o configuración.[/]")
+            raise typer.Exit(EXIT_SIN_CONFIRMAR)
+    except (OSError, ValueError) as exc:
+        console.print(f"[red]✗ Error al verificar la simulación: {redact(str(exc))}[/]")
+        raise typer.Exit(EXIT_ERROR) from exc
 
     if accion.operacion in OPERACIONES_IA:
         # Motor IA (sin Typer dentro): sin key ni red degrada a heurística
@@ -299,7 +320,7 @@ def ejecutar_accion(
         _pedir_confirmacion_o_salir(nombre, carpeta, plan)
 
     try:
-        bitacora, ruta_manifiesto = ejecutar_plan(accion, carpeta, plan)
+        bitacora, ruta_manifiesto = motor.ejecutar(accion, carpeta, plan)
     except (AccionError, OSError) as exc:
         # `redact` SIEMPRE: un error del motor puede arrastrar la key del
         # centro (p. ej. un volcado de la cabecera Authorization). La consola
@@ -343,6 +364,7 @@ def deshacer(
     operación no es reversible (contuvo borrados definitivos).
     """
     _resolver_carpeta_o_salir(carpeta)
+    _comprobar_limite_o_salir(carpeta)
     try:
         papelera_base = resolver_papelera_cli(carpeta.resolve(), papelera)
         manifiesto, bitacora = deshacer_operacion(papelera_base, n)
