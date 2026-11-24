@@ -13,8 +13,12 @@ atribuye conversaciones anteriores que no se han conservado.
   tareas pendientes de apuntes. Se añadieron las dos acciones con alternativas
   locales claramente indicadas para cuando no haya conexión.
 
+## Observación del usuario sobre OpenCode
+
+El usuario indica que no observó fallos en OpenCode, aunque trabaja muy lento.
+
 ## Pendiente de completar por el alumno
 
-Anota aquí los prompts que utilizaste en OpenCode durante la sesión 3, qué
-respuestas corregiste y un fallo real observado. Si consultaste context7,
-indica la consulta y lo que aprendiste. No incluyas claves ni datos privados.
+Anota aquí los prompts que utilizaste en OpenCode durante la sesión 3 y qué
+respuestas corregiste. Si consultaste context7, indica la consulta y lo que
+aprendiste. No incluyas claves ni datos privados.
