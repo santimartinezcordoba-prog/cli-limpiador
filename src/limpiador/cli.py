@@ -22,12 +22,11 @@ from rich.console import Console
 from rich.text import Text
 
 from limpiador import __version__
-from limpiador.acciones import AccionError, Motor, Operacion, buscar_accion
+from limpiador.acciones import Motor, Operacion, buscar_accion
 from limpiador.config import (
     OPERACIONES_IA,
     Accion,
     Config,
-    ConfigInvalidaError,
     cargar_config,
 )
 from limpiador.errores import (
@@ -36,15 +35,18 @@ from limpiador.errores import (
     EXIT_OFFLINE,
     EXIT_OK,
     EXIT_SIN_CONFIRMAR,
+    AccionError,
+    ConfigInvalidaError,
+    IAError,
+    PapeleraError,
 )
 from limpiador.ia import CentroIA
 from limpiador.papelera import (
-    PapeleraError,
     deshacer_operacion,
     resolver_papelera_cli,
 )
 from limpiador.secretos import redact
-from limpiador.seguridad import comprobar_limite, consumir_simulacion, registrar_simulacion
+from limpiador.seguridad import comprobar_limite, huella
 from limpiador.tabla import tabla_acciones, tabla_ficheros, tabla_operaciones
 
 RESPUESTAS_AFIRMATIVAS: Final[frozenset[str]] = frozenset({"s", "si", "sí", "y", "yes"})
@@ -280,35 +282,22 @@ def ejecutar_accion(
         )
         raise typer.Exit(EXIT_OK)
 
-    try:
-        if simular:
-            registrar_simulacion(accion, carpeta)
-        elif not consumir_simulacion(accion, carpeta):
-            console.print("[red]✗ Ejecuta --simular primero para esta acción y carpeta; "
-                          "repite la simulación si cambió su contenido o configuración.[/]")
-            raise typer.Exit(EXIT_SIN_CONFIRMAR)
-    except (OSError, ValueError) as exc:
-        console.print(f"[red]✗ Error al verificar la simulación: {redact(str(exc))}[/]")
-        raise typer.Exit(EXIT_ERROR) from exc
-
-    if accion.operacion in OPERACIONES_IA:
-        # Motor IA (sin Typer dentro): sin key ni red degrada a heurística
-        # (exit 4). El plan IA es orientativo: la tabla solo se pinta en
-        # --simular; en modo real el motor recalcula objetivo y destino.
-        if simular:
-            console.print(tabla_operaciones(plan, simulacion=True))
-            console.print(
-                "[yellow]Simulación: no se ha modificado nada (la IA decide "
-                "la salida al ejecutar).[/]"
-            )
-            raise typer.Exit(EXIT_OK)
-        raise typer.Exit(_ejecutar_ia_o_salir(accion, nombre, carpeta, plan, si=si))
-
-    console.print(tabla_operaciones(plan, simulacion=simular))
-
+    # Se muestra un plan recién calculado antes de cada ejecución. La huella
+    # se guarda solo en memoria y detecta cambios mientras se pide permiso.
+    console.print(tabla_operaciones(plan, simulacion=True))
     if simular:
-        console.print("[yellow]Simulación: no se ha modificado nada.[/]")
+        if accion.operacion in OPERACIONES_IA:
+            console.print("[yellow]Simulación: no se ha modificado nada "
+                          "(la IA decide la salida al ejecutar).[/]")
+        else:
+            console.print("[yellow]Simulación: no se ha modificado nada.[/]")
         raise typer.Exit(EXIT_OK)
+
+    try:
+        huella_antes = huella(accion, carpeta)
+    except (OSError, ValueError) as exc:
+        console.print(f"[red]✗ Error al verificar la carpeta: {redact(str(exc))}[/]")
+        raise typer.Exit(EXIT_ERROR) from exc
 
     if not si:
         if not _stdin_interactivo():
@@ -318,6 +307,18 @@ def ejecutar_accion(
             )
             raise typer.Exit(EXIT_SIN_CONFIRMAR)
         _pedir_confirmacion_o_salir(nombre, carpeta, plan)
+
+    try:
+        if huella(accion, carpeta) != huella_antes:
+            console.print("[red]✗ La carpeta ha cambiado; vuelve a ejecutar para "
+                          "revisar un plan actualizado.[/]")
+            raise typer.Exit(EXIT_SIN_CONFIRMAR)
+    except (OSError, ValueError) as exc:
+        console.print(f"[red]✗ Error al verificar la carpeta: {redact(str(exc))}[/]")
+        raise typer.Exit(EXIT_ERROR) from exc
+
+    if accion.operacion in OPERACIONES_IA:
+        raise typer.Exit(_ejecutar_ia_o_salir(accion, nombre, carpeta, plan, si=True))
 
     try:
         bitacora, ruta_manifiesto = motor.ejecutar(accion, carpeta, plan)
@@ -488,7 +489,7 @@ def _ejecutar_ia_o_salir(
     try:
         _, raiz, objetivos, _ = acciones_ia.planificar_ia_desde(accion, carpeta)
         bitacora, codigo, ruta_log = acciones_ia.ejecutar_ia(accion, raiz, objetivos)
-    except (acciones_ia.IAError, AccionError, OSError) as exc:
+    except (IAError, AccionError, OSError) as exc:
         console.print(f"[red]✗ Error al ejecutar la acción IA: {redact(str(exc))}[/]")
         return EXIT_ERROR
 

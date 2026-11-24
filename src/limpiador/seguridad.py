@@ -1,4 +1,4 @@
-"""Límites de trabajo y comprobantes de simulación de un solo uso."""
+"""Límites de trabajo y huella de la simulación en memoria."""
 
 from __future__ import annotations
 
@@ -20,14 +20,7 @@ def comprobar_limite(carpeta: Path) -> None:
         raise ValueError("La carpeta debe estar dentro de ~/pruebas-tareas.")
 
 
-def _comprobante(accion: Accion, carpeta: Path) -> Path:
-    identificador = hashlib.sha256(
-        (str(carpeta.resolve()) + "\0" + accion.nombre).encode()
-    ).hexdigest()
-    return Path.home() / ".cache" / "limpiador" / "simulaciones" / identificador
-
-
-def _huella(accion: Accion, carpeta: Path) -> str:
+def huella(accion: Accion, carpeta: Path) -> str:
     """Incluye la configuración y los contenidos sin seguir enlaces simbólicos."""
     raiz = carpeta.resolve()
     huella = hashlib.sha256(accion.model_dump_json().encode())
@@ -47,20 +40,3 @@ def _huella(accion: Accion, carpeta: Path) -> str:
         else:
             raise ValueError(f"Tipo de archivo no admitido: {relativa}")
     return huella.hexdigest()
-
-
-def registrar_simulacion(accion: Accion, carpeta: Path) -> None:
-    comprobante = _comprobante(accion, carpeta)
-    huella = _huella(accion, carpeta)
-    comprobante.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    comprobante.write_text(huella, encoding="ascii")
-
-
-def consumir_simulacion(accion: Accion, carpeta: Path) -> bool:
-    comprobante = _comprobante(accion, carpeta)
-    try:
-        anterior = comprobante.read_text(encoding="ascii")
-    except FileNotFoundError:
-        return False
-    comprobante.unlink(missing_ok=True)
-    return anterior == _huella(accion, carpeta)

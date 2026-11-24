@@ -2,7 +2,7 @@
 
 > Documento para agentes/usuarios que generan o editan el fichero de
 > acciones de `limpiador`. Describe el JSON **actual** (v1.2.0): las cuatro
-> operaciones clásicas y las tres operaciones IA nuevas, cómo se valida cada
+> operaciones clásicas y las dos operaciones IA disponibles, cómo se valida cada
 > tipo y qué campos son obligatorios. La versión humana de referencia es el
 > README del repo; este documento y el README se mantienen coherentes.
 

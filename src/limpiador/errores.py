@@ -23,6 +23,31 @@ from __future__ import annotations
 
 from typing import Final
 
+
+class LimpiadorError(Exception):
+    """Error previsto del programa, que puede comunicarse al usuario."""
+
+
+class ConfigInvalidaError(LimpiadorError):
+    """Error de configuración con la lista completa de fallos."""
+
+    def __init__(self, errores: list[str]) -> None:
+        self.errores = errores
+        super().__init__("; ".join(errores))
+
+
+class AccionError(LimpiadorError):
+    """Error al resolver o ejecutar una acción."""
+
+
+class PapeleraError(LimpiadorError):
+    """Error al escribir o revertir un manifiesto."""
+
+
+class IAError(LimpiadorError):
+    """Error de una acción de IA."""
+
+
 EXIT_OK: Final = 0
 EXIT_ERROR: Final = 1
 EXIT_SIN_CONFIRMAR: Final = 2
@@ -30,6 +55,11 @@ EXIT_CONFIG_INVALIDA: Final = 3
 EXIT_OFFLINE: Final = 4
 
 __all__ = [
+    "LimpiadorError",
+    "ConfigInvalidaError",
+    "AccionError",
+    "PapeleraError",
+    "IAError",
     "EXIT_OK",
     "EXIT_ERROR",
     "EXIT_SIN_CONFIRMAR",

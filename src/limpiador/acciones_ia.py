@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
 from limpiador.acciones import Operacion
-from limpiador.errores import EXIT_OFFLINE, EXIT_OK
+from limpiador.errores import EXIT_OFFLINE, EXIT_OK, IAError
 from limpiador.ia import CentroIA, SinRedError
 from limpiador.secretos import redact
 
@@ -69,10 +69,6 @@ _EXTENSIONES_ETIQUETA: Final[dict[str, tuple[str, ...]]] = {
 }
 
 _SPLIT_FRASES: Final[re.Pattern[str]] = re.compile(r"(?<=[.!?])\s+")
-
-
-class IAError(Exception):
-    """Error de una acción IA que sí debe abortar (modo estricto o fallo disco)."""
 
 
 class IAccion(Protocol):

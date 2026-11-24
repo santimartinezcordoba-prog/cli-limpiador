@@ -15,7 +15,7 @@ ejecuta, con simulación previa y confirmaciones de seguridad.
   [Rich](https://rich.readthedocs.io/) (tablas), [pydantic](https://docs.pydantic.dev/)
   (validación), pytest, ruff, mypy.
 - La simulación no modifica los archivos de trabajo (probado con hash),
-  y la ejecución exige simulación previa y confirmación; «borrar» puede ir a una **papelera reversible**
+  y cada ejecución muestra una simulación previa y pide confirmación; «borrar» puede ir a una **papelera reversible**
   con `deshacer`, las operaciones están en whitelist y todo path traversal
   (`..`) se rechaza.
 
@@ -75,7 +75,7 @@ limpiador doctor
 # Simular: muestra qué haría sin modificar los archivos de trabajo
 limpiador ejecutar mover-imagenes ~/pruebas-tareas --simular
 
-# Ejecutar de verdad sin preguntar (para scripts; usa antes --simular)
+# Ejecutar: muestra el plan y confirma sin preguntar (para scripts)
 limpiador ejecutar mover-imagenes ~/pruebas-tareas --si
 
 # Deshacer: revierte la última ejecución real (1 = última, 2 = penúltima…)
@@ -98,18 +98,24 @@ archivos de prueba. Tanto `ejecutar` como `deshacer` solo aceptan esa carpeta
 o subcarpetas dentro de ella; las rutas se resuelven antes de comprobar el
 límite. `listar` sigue siendo una operación de lectura.
 
-Antes de cada ejecución real hay que simular la misma acción sobre la misma
-carpeta. La CLI guarda un comprobante de un solo uso en
-`~/.cache/limpiador/simulaciones`, fuera de la carpeta de trabajo. Si cambia
-el contenido de la carpeta o la configuración de la acción, hay que volver a
-simular. También hay que repetirla si se cancela la confirmación. En acciones
-IA, la salida final depende del modelo y el plan mostrado es orientativo.
-`--si` constituye la confirmación explícita para scripts, incluso al borrar.
+Cada ejecución real calcula y muestra automáticamente una simulación actual
+antes de pedir confirmación o de actuar con `--si`. También puedes usar
+`--simular` para ver el plan y salir sin ejecutar. La simulación no guarda
+comprobantes ni modifica archivos de trabajo; el plan se conserva en memoria durante la
+confirmación. Si cambia el contenido de la carpeta mientras se pide la
+confirmación, la ejecución se cancela. En acciones IA, la salida final depende
+del modelo y el plan mostrado es orientativo. `--si` constituye confirmación
+explícita para scripts, incluso al borrar; no pausa para revisar el plan.
+
+El intérprete de Python puede crear archivos de caché `__pycache__` al importar
+módulos. Para evitar también esas escrituras durante la simulación, ejecuta
+`PYTHONDONTWRITEBYTECODE=1 limpiador ... --simular` en bash; en PowerShell,
+establece antes `$env:PYTHONDONTWRITEBYTECODE = "1"`.
 
 | Flags                 | Comportamiento                                                    |
 | --------------------- | ----------------------------------------------------------------- |
 | `--simular`           | Muestra el plan y no modifica la carpeta de trabajo (exit `0`).        |
-| `--si`                | Confirma la ejecución para scripts, después de simular.                             |
+| `--si`                | Muestra el plan y confirma la ejecución para scripts sin pausa.                             |
 | (ninguno) con terminal | Pide confirmación `s/N`. Si respondes `n`, no hace nada.         |
 | (ninguno) sin TTY     | **Se niega a ejecutar y sale con código 2** (evita sorpresas en cron/pipes). |
 
@@ -119,7 +125,7 @@ enlaces simbólicos y nunca sobrescriben ficheros (añaden sufijos `-1`, `-2`…
 
 ### Papelera y `deshacer` (borrado reversible)
 
-Una acción `borrar` o `dedup` puede activar la papelera:
+Por ejemplo, se puede añadir una acción `borrar` con papelera:
 
 ```json
 { "nombre": "borrar-temporales", "operacion": "borrar", "patrones": ["*.tmp"], "papelera": true }
@@ -236,7 +242,7 @@ inseguro: la forma correcta es `verify=<ruta-al-CA>`. El código de red de
 
 | Amenaza | Mitigación | Test que lo prueba |
 | ------- | ---------- | ------------------ |
-| Borrado sorpresa por un patrón mal escrito | `--simular` obligatorio + confirmación `s/N`; sin TTY, exit 2 y nada se ejecuta | `test_simular_no_toca_disco_hash_identico`, `test_sin_tty_y_sin_si_se_niega_y_sale_2` |
+| Borrado sorpresa por un patrón mal escrito | simulación automática + confirmación `s/N`; sin TTY, exit 2 y nada se ejecuta | `test_simular_no_toca_disco_hash_identico`, `test_sin_tty_y_sin_si_se_niega_y_sale_2` |
 | Error humano ya ejecutado | Papelera + manifiesto reversible + `deshacer` (nunca sobrescribe: `.restaurado`) | `test_papelera_borrar_mueve_en_vez_de_borrar`, `test_deshacer_restaura_ruta_original`, `test_deshacer_no_sobrescribe_si_existe` |
 | Operaciones arbitrarias (chmod, exec…) | Whitelist pydantic: `mover`, `borrar`, `renombrar`, `dedup` + `resumir-texto`/`clasificar-ficheros`; todo lo demás falla la validación con exit 3 | `test_validar_operacion_no_soportada`, `test_validar_camino_feliz_ia` |
 | Path traversal / escapar de la carpeta (`../`, absolutas, `~`, enlaces) | `es_ruta_segura` en patrones/destinos/papelera + contención con `resolve()`; enlaces simbólicos se ignoran | `test_patron_con_path_traversal`, `test_destino_con_path_traversal`, `test_papelera_path_traversal_se_rechaza`, `test_no_sigue_enlaces_simbolicos_fuera_de_la_carpeta` |
@@ -263,7 +269,7 @@ aserción fallara, la garantía correspondiente deja de ser cierta.
 | `test_validar_operacion_no_soportada` | exit 3 + `acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup, resumir-texto, clasificar-ficheros)` | La whitelist se aplica al validar, con índice y campo exactos. |
 | `test_validar_mover_sin_destino` | exit 3 + `acciones[0].destino: campo requerido ('destino' es obligatorio cuando operacion='mover')` | Coherencia entre campos: un `mover` sin destino es una bomba de relojería. |
 | `test_validar_json_flag_con_errores` | `--json` devuelve TODOS los errores como array y sale 3 | Auditoría automatizable: un script puede exigir `valido: true`. |
-| `test_simular_no_toca_disco_hash_identico` (parametrizado por operación) | SHA256 del árbol (rutas+contenidos) idéntico antes/después de `--simular` + «simulación»/«no se ha modificado» en la salida | Prueba empírica estrella: `--simular` no escribe ni un byte. |
+| `test_simular_no_toca_disco_hash_identico` (parametrizado por operación) | SHA256 del árbol (rutas+contenidos) idéntico antes/después de `--simular` + «simulación»/«no se ha modificado» en la salida | El árbol de la carpeta de trabajo queda intacto. |
 | `test_si_mueve_las_imagenes_de_verdad` | `--si` mueve `foto.png`/`selfie.jpg` a `imagenes/` conservando el contenido | La ejecución real hace exactamente lo prometido en el plan. |
 | `test_sin_tty_y_sin_si_se_niega_y_sale_2` | Sin terminal y sin `--si`: exit 2, pide `--si` y no mueve nada | En cron/CI/pipes no puede haber destrucción silenciosa. |
 | `test_carpeta_inexistente_al_ejecutar` | `ejecutar` sobre carpeta que no existe → exit 1 + «no existe» | Caso feo: la ruta objetivo también se valida, no solo la acción. |
@@ -284,7 +290,7 @@ aserción fallara, la garantía correspondiente deja de ser cierta.
 | `test_accion_ia_camino_feliz_con_mock` | Con cliente mock: exit 0, resumen del «centro» escrito y log redactado | La vía online funciona end-to-end sin tocar la red (mock, no llamadas reales). |
 | `test_validar_accion_ia_sin_modelo` | Acción IA sin `modelo`: exit 3 con el campo exacto (`acciones[i]: 'modelo' es obligatorio…`) | Una acción IA sin modelo es una promesa vacía: se detecta al validar, no al ejecutar. |
 | `test_validar_modo_offline_invalido` | `modo_offline: "magia"`: exit 3 listando los valores permitidos (`heuristica`, `estricto`) | La política de degradación no se escribe a ojo: la whitelist también protege la config. |
-| `test_simular_accion_ia_no_escribe_nada` | `--simular` sobre acción IA: hash del árbol idéntico | La promesa de `--simular` (cero bytes escritos) aplica también a las acciones nuevas. |
+| `test_simular_accion_ia_no_escribe_nada` | `--simular` sobre acción IA: hash del árbol idéntico | La simulación de IA deja intacta la carpeta de trabajo. |
 | `test_no_hay_claves_en_repo` | Escanea TODOS los ficheros versionados (nunca `.env`) con patrones de key: falla si aparece alguna | «Ninguna clave en el historial» como test, no como promesa: un `sk-…` en un PR rompe la suite y el CI. |
 | `test_redacta_clave_en_error` | Un error que contiene la key (una fake) sale enmascarada (`sk-****`) | La redacción funciona con la key real, no solo con patrones genéricos. |
 | `test_forma_obsoleta_proxies_falla` | `httpx.Client(proxies={...})` lanza `TypeError` en 0.28; `proxy=`/`mounts=` son la forma viva | Fija en ejecución la auditoría del MCP context7: si alguien reintroduce la API muerta, la suite lo detecta. |
@@ -322,10 +328,10 @@ adáptalo. Estructura:
       "destino": "imagenes"
     },
     {
-      "nombre": "borrar-temporales",
-      "descripcion": "Borra ficheros temporales .tmp (a la papelera: reversible)",
-      "operacion": "borrar",
-      "patrones": ["*.tmp"],
+      "nombre": "archivar-imagenes-duplicadas",
+      "descripcion": "Conserva una imagen de cada contenido y archiva duplicados",
+      "operacion": "dedup",
+      "patrones": ["*.png", "*.jpg", "*.jpeg", "*.webp"],
       "papelera": true
     },
     {
@@ -383,19 +389,19 @@ El fichero 'acciones.json' no es válido:
 ### Uso end-to-end (de cero a deshacer)
 
 ```bash
-# 1) "init": copia el ejemplo del repo y activa la papelera en el borrado
+# 1) Prepara la carpeta y copia la configuración del repositorio
 mkdir -p ~/pruebas-tareas
 cp acciones.json ~/pruebas-tareas/acciones.json
-#    (en "borrar-temporales" ya viene "papelera": true de serie)
+#    Pon imágenes de prueba duplicadas en ~/pruebas-tareas
 
 # 2) validar: la config debe pasar antes de tocar nada (exit 3 si no)
 limpiador --config ~/pruebas-tareas/acciones.json validar
 
 # 3) simular sin modificar los archivos de trabajo
-limpiador --config ~/pruebas-tareas/acciones.json ejecutar borrar-temporales ~/pruebas-tareas --simular
+limpiador --config ~/pruebas-tareas/acciones.json ejecutar archivar-imagenes-duplicadas ~/pruebas-tareas --simular
 
-# 4) ejecutar de verdad: los .tmp viajan a papelera/<marca>/ + manifiesto
-limpiador --config ~/pruebas-tareas/acciones.json ejecutar borrar-temporales ~/pruebas-tareas --si
+# 4) ejecutar: las imágenes duplicadas viajan a la papelera con manifiesto
+limpiador --config ~/pruebas-tareas/acciones.json ejecutar archivar-imagenes-duplicadas ~/pruebas-tareas --si
 
 # 5) te has asustado: deshacer devuelve todo a su sitio
 limpiador deshacer --carpeta ~/pruebas-tareas

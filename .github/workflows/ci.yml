@@ -198,7 +198,7 @@ jobs:
           rm -rf "$HOME/pruebas-tareas/smoke-pruebas"
           mkdir -p "$HOME/pruebas-tareas/smoke-pruebas"
           printf 'x' > "$HOME/pruebas-tareas/smoke-pruebas/foto.png"
-          printf 'x' > "$HOME/pruebas-tareas/smoke-pruebas/basura.tmp"
+          printf 'x' > "$HOME/pruebas-tareas/smoke-pruebas/foto-copia.png"
           command -v limpiador >/dev/null || { echo "limpiador NO está en PATH"; exit 1; }
           # `find | sort | while ... | sha256sum`: si el bucle no emite ninguna
           # línea, sha256sum devuelve el hash de la cadena vacía (e3b0c442...)
@@ -219,7 +219,7 @@ jobs:
           }
           ANTES=$(hash_arbol "$HOME/pruebas-tareas/smoke-pruebas")
           limpiador --config ./acciones.json ejecutar mover-imagenes "$HOME/pruebas-tareas/smoke-pruebas" --simular
-          limpiador --config ./acciones.json ejecutar borrar-temporales "$HOME/pruebas-tareas/smoke-pruebas" --simular
+          limpiador --config ./acciones.json ejecutar archivar-imagenes-duplicadas "$HOME/pruebas-tareas/smoke-pruebas" --simular
           DESPUES=$(hash_arbol "$HOME/pruebas-tareas/smoke-pruebas")
           test "$ANTES" = "$DESPUES" || { echo "--simular TOCO el disco"; exit 1; }
           test -d "$HOME/pruebas-tareas/smoke-pruebas/imagenes" && { echo "--simular creó carpetas"; exit 1; }
