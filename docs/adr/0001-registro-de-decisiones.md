@@ -11,6 +11,12 @@ contrato (exit codes, validación, seguridad) se erosiona.
 
 ## Decisión
 
+Las acciones se declaran en un archivo JSON externo en vez de escribir cada
+regla en el código. Así se pueden cambiar nombres, patrones y destinos sin
+modificar ni reinstalar el programa. La configuración se valida antes de usarla:
+el JSON solo puede elegir operaciones permitidas, no ejecutar código arbitrario.
+Esto exige mantener un esquema y comunicar los errores de validación al usuario.
+
 1. Arquitectura Accion/Motor: la interfaz (Typer+Rich en `cli.py`) solo
    decora; toda la lógica vive en módulos testeables sin CLI
    (`acciones.py`, `config.py`, …).

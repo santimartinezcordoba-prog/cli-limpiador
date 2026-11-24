@@ -195,10 +195,10 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="$HOME/.local/bin:$PATH"
-          rm -rf /tmp/smoke-pruebas
-          mkdir -p /tmp/smoke-pruebas
-          printf 'x' > /tmp/smoke-pruebas/foto.png
-          printf 'x' > /tmp/smoke-pruebas/basura.tmp
+          rm -rf "$HOME/pruebas-tareas/smoke-pruebas"
+          mkdir -p "$HOME/pruebas-tareas/smoke-pruebas"
+          printf 'x' > "$HOME/pruebas-tareas/smoke-pruebas/foto.png"
+          printf 'x' > "$HOME/pruebas-tareas/smoke-pruebas/basura.tmp"
           command -v limpiador >/dev/null || { echo "limpiador NO está en PATH"; exit 1; }
           # `find | sort | while ... | sha256sum`: si el bucle no emite ninguna
           # línea, sha256sum devuelve el hash de la cadena vacía (e3b0c442...)
@@ -217,11 +217,11 @@ jobs:
             fi
             printf '%s\n' "$h"
           }
-          ANTES=$(hash_arbol /tmp/smoke-pruebas)
-          limpiador --config ./acciones.json ejecutar mover-imagenes /tmp/smoke-pruebas --simular
-          limpiador --config ./acciones.json ejecutar borrar-temporales /tmp/smoke-pruebas --simular
-          DESPUES=$(hash_arbol /tmp/smoke-pruebas)
+          ANTES=$(hash_arbol "$HOME/pruebas-tareas/smoke-pruebas")
+          limpiador --config ./acciones.json ejecutar mover-imagenes "$HOME/pruebas-tareas/smoke-pruebas" --simular
+          limpiador --config ./acciones.json ejecutar borrar-temporales "$HOME/pruebas-tareas/smoke-pruebas" --simular
+          DESPUES=$(hash_arbol "$HOME/pruebas-tareas/smoke-pruebas")
           test "$ANTES" = "$DESPUES" || { echo "--simular TOCO el disco"; exit 1; }
-          test -d /tmp/smoke-pruebas/imagenes && { echo "--simular creó carpetas"; exit 1; }
-          test -d /tmp/smoke-pruebas/papelera && { echo "--simular creó la papelera"; exit 1; }
+          test -d "$HOME/pruebas-tareas/smoke-pruebas/imagenes" && { echo "--simular creó carpetas"; exit 1; }
+          test -d "$HOME/pruebas-tareas/smoke-pruebas/papelera" && { echo "--simular creó la papelera"; exit 1; }
           echo "smoke OK: árbol intacto bajo --simular"

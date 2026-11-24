@@ -326,3 +326,15 @@ def ejecutar(
         timestamp=datetime.now().isoformat(timespec="seconds"),
     )
     return bitacora, manifiesto
+
+
+class Motor:
+    """Planifica y ejecuta acciones sin depender de la interfaz de consola."""
+
+    def planificar(self, accion: Accion, carpeta: Path) -> list[Operacion]:
+        return planificar(accion, carpeta)
+
+    def ejecutar(
+        self, accion: Accion, carpeta: Path, plan: list[Operacion]
+    ) -> tuple[list[str], Path | None]:
+        return ejecutar(accion, carpeta, plan)

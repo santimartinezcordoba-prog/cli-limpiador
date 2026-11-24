@@ -84,9 +84,7 @@ def test_redacta_clave_en_error(
             f"el centro rechazó la petición: Authorization: Bearer {clave}"
         )
 
-    # La CLI hace `from ... import ejecutar` al importar: se parchea la
-    # referencia que usa `cli.py`, que es la que se invoca al ejecutar.
-    monkeypatch.setattr("limpiador.cli.ejecutar_plan", explosion)
+    monkeypatch.setattr("limpiador.acciones.Motor.ejecutar", explosion)
     monkeypatch.setenv("LIMPIADOR_IA_KEY", clave)
 
     config = _config_que_falla_con_la_key(clave)
@@ -95,6 +93,10 @@ def test_redacta_clave_en_error(
     carpeta.mkdir()
     (carpeta / "foto.png").write_bytes(b"x")
 
+    runner.invoke(
+        app,
+        ["--config", str(ruta), "ejecutar", "rompe-con-key", str(carpeta), "--simular"],
+    )
     resultado = runner.invoke(
         app,
         ["--config", str(ruta), "ejecutar", "rompe-con-key", str(carpeta), "--si"],
