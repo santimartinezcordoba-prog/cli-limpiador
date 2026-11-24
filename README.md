@@ -120,8 +120,15 @@ establece antes `$env:PYTHONDONTWRITEBYTECODE = "1"`.
 | (ninguno) sin TTY     | **Se niega a ejecutar y sale con código 2** (evita sorpresas en cron/pipes). |
 
 Además: las acciones solo actúan sobre la carpeta indicada (nivel superior,
-no recursivo), rechazan patrones y destinos con `..` (path traversal), ignoran
+no recursivo), comparan patrones sin distinguir mayúsculas de minúsculas,
+rechazan patrones y destinos con `..` (path traversal), ignoran
 enlaces simbólicos y nunca sobrescriben ficheros (añaden sufijos `-1`, `-2`…).
+Las acciones actúan en el primer nivel de la carpeta indicada. Si ya moviste
+las imágenes a `imagenes/`, ejecuta `archivar-imagenes-duplicadas` indicando
+esa subcarpeta: no se comparan archivos entre carpetas distintas. Para revisar
+los duplicados antes de moverlos, ejecuta la acción sobre la carpeta original.
+Al renombrar, se omiten los archivos que ya terminan con el sufijo configurado
+(o con su variante numerada por colisión), para no repetirlo en cada ejecución.
 
 ### Papelera y `deshacer` (borrado reversible)
 
@@ -171,6 +178,10 @@ vigentes) y el vocabulario completo documentado en la skill
 - **`clasificar-ficheros`**: copia cada fichero a una subcarpeta según su
   tema (respuesta del centro, o extensión/palabras clave si degrada). El
   fichero original permanece en su ubicación.
+
+Las dos acciones IA admiten `.txt` y `.md`: aplican operaciones diferentes
+sobre los mismos archivos. Los resúmenes generados también son `.md` y pueden
+quedar incluidos en ejecuciones posteriores; revisa el plan antes de continuar.
 
 Campos nuevos en el JSON: `modelo` (obligatorio en acciones IA; si falta,
 `validar` sale 3 con `'modelo' es obligatorio…`), `prompt` (opcional) y

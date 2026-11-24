@@ -47,8 +47,8 @@
   - `acciones[i]: 'sufijo' es obligatorio cuando operacion='renombrar'`
   - `acciones[i]: 'modelo' es obligatorio cuando operacion='resumir-texto'`
     (y análogo para `clasificar-ficheros`)
-  - `acciones[i]: 'destino' no aplica a la operación 'resumir-texto'` (en IA
-    no hay destino/sufijo/papelera)
+  - `acciones[i]: 'destino' solo aplica a la operación 'mover'` (también
+    para acciones IA; lo mismo se aplica al campo `sufijo`).
   - `acciones[i]: 'modelo'/'prompt' solo aplican a operaciones IA (clasificar-ficheros, resumir-texto)`
   - `'papelera' solo aplica a las operaciones 'borrar' o 'dedup'`
 - `modo_offline` con valor inválido:
