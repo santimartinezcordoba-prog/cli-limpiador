@@ -149,8 +149,9 @@ vigentes) y el vocabulario completo documentado en la skill
 - **`resumir-texto`**: lee los `.md`/`.txt` que casen con `patrones` y escribe
   el resumen (del centro o de la heurística) en `<nombre>.resumen.md` junto al
   original. `--simular` no escribe nada.
-- **`clasificar-ficheros`**: mueve cada fichero a una subcarpeta según su
-  tema (respuesta del centro, o extensión/palabras clave si degrada).
+- **`clasificar-ficheros`**: copia cada fichero a una subcarpeta según su
+  tema (respuesta del centro, o extensión/palabras clave si degrada). El
+  fichero original permanece en su ubicación.
 
 Campos nuevos en el JSON: `modelo` (obligatorio en acciones IA; si falta,
 `validar` sale 3 con `'modelo' es obligatorio…`), `prompt` (opcional) y
