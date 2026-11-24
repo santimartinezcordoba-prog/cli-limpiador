@@ -41,3 +41,49 @@ def test_acciones_ia_incluidas_sin_clave(runner: CliRunner, tmp_path: Path, nomb
     real = runner.invoke(app, [*base, "--si"])
     assert real.exit_code == 4, real.output
     assert "modo offline" in real.output
+
+
+def test_mover_y_deduplicar_en_carpeta_de_destino(runner: CliRunner, tmp_path: Path) -> None:
+    carpeta = tmp_path / "pruebas"
+    carpeta.mkdir()
+    (carpeta / "foto.JPG").write_bytes(b"imagen")
+    (carpeta / "copia.PNG").write_bytes(b"imagen")
+    mover = ["--config", str(CONFIG), "ejecutar", "mover-imagenes", str(carpeta)]
+    assert runner.invoke(app, [*mover, "--simular"]).exit_code == 0
+    resultado = runner.invoke(app, [*mover, "--si"])
+    assert resultado.exit_code == 0, resultado.output
+    imagenes = carpeta / "imagenes"
+    assert (imagenes / "foto.JPG").exists()
+    assert (imagenes / "copia.PNG").exists()
+    dedup = ["--config", str(CONFIG), "ejecutar", "archivar-imagenes-duplicadas", str(imagenes)]
+    resultado = runner.invoke(app, [*dedup, "--si"])
+    assert resultado.exit_code == 0, resultado.output
+    assert len([p for p in imagenes.iterdir() if p.is_file()]) == 1
+    assert len([p for p in (imagenes / "papelera").rglob("*") if p.suffix in {".JPG", ".PNG"}]) == 1
+
+
+def test_renombrar_incluido_no_repite_sufijo(runner: CliRunner, tmp_path: Path) -> None:
+    carpeta = tmp_path / "pruebas"
+    carpeta.mkdir()
+    (carpeta / "nota.TXT").write_text("contenido", encoding="utf-8")
+    base = ["--config", str(CONFIG), "ejecutar", "renombrar-viejos", str(carpeta), "--si"]
+    primero = runner.invoke(app, base)
+    assert primero.exit_code == 0, primero.output
+    assert (carpeta / "nota-revisar.TXT").exists()
+    segundo = runner.invoke(app, base)
+    assert segundo.exit_code == 0, segundo.output
+    assert (carpeta / "nota-revisar.TXT").exists()
+    assert not (carpeta / "nota-revisar-revisar.TXT").exists()
+
+
+def test_validar_accion_ia_con_destino_muestra_regla(runner: CliRunner, tmp_path: Path) -> None:
+    import json
+
+    config = tmp_path / "acciones.json"
+    config.write_text(json.dumps({"version": 1, "acciones": [{
+        "nombre": "resumir", "descripcion": "Resumen", "operacion": "resumir-texto",
+        "patrones": ["*.txt"], "modelo": "modelo", "destino": "salida",
+    }]}), encoding="utf-8")
+    resultado = runner.invoke(app, ["--config", str(config), "validar"])
+    assert resultado.exit_code == 3
+    assert "'destino' solo aplica a la operación 'mover'" in resultado.output

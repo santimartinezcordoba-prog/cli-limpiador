@@ -11,7 +11,9 @@ cada ejecución real deja un manifiesto reversible en `<papelera>/.manifiesto/`
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -141,14 +143,13 @@ def ficheros_que_coinciden(accion: Accion, raiz: Path) -> list[Path]:
     - el resultado se deduplica y se ordena para que la salida sea determinista.
     """
     encontrados: set[Path] = set()
-    for patron in accion.patrones:
-        for coincidencia in raiz.glob(patron):
-            if coincidencia.is_symlink():
-                continue
-            if not coincidencia.is_file():
-                continue
-            if not _esta_dentro(coincidencia, raiz):
-                continue
+    patrones = [patron.casefold() for patron in accion.patrones]
+    for coincidencia in raiz.iterdir():
+        if coincidencia.is_symlink() or not coincidencia.is_file():
+            continue
+        if not _esta_dentro(coincidencia, raiz):
+            continue
+        if any(fnmatch.fnmatchcase(coincidencia.name.casefold(), p) for p in patrones):
             encontrados.add(coincidencia)
     return sorted(encontrados)
 
@@ -255,6 +256,9 @@ class Renombrar(AccionPlanificadora):
         plan: list[Operacion] = []
         simulados: set[Path] = set()
         for origen in objetivos:
+            sufijo = re.escape(self.config.sufijo)
+            if re.search(rf"-{sufijo}(?:-\d+)?$", origen.stem):
+                continue
             nuevo = origen.with_name(f"{origen.stem}-{self.config.sufijo}{origen.suffix}")
             if nuevo.exists() or nuevo in simulados:
                 nuevo = _destino_libre_simulado(nuevo, simulados)
