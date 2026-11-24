@@ -12,11 +12,13 @@ cada ejecución real deja un manifiesto reversible en `<papelera>/.manifiesto/`
 from __future__ import annotations
 
 import hashlib
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from limpiador.config import OPERACIONES_IA, Accion, Config
+from limpiador.errores import AccionError
 from limpiador.papelera import (
     EntradaManifiesto,
     base_papelera,
@@ -24,10 +26,6 @@ from limpiador.papelera import (
     nueva_marca_temporal,
     nuevo_op_id,
 )
-
-
-class AccionError(Exception):
-    """Error al resolver o ejecutar una acción (carpeta, colisiones, permisos)."""
 
 
 @dataclass(frozen=True)
@@ -190,54 +188,86 @@ def planificar(accion: Accion, carpeta: Path) -> list[Operacion]:
     return planificar_desde_objetivos(accion, raiz, objetivos)
 
 
-def planificar_desde_objetivos(
-    accion: Accion, raiz: Path, objetivos: list[Path]
-) -> list[Operacion]:
-    """Igual que `planificar` pero con la carpeta ya validada y los objetivos
-    contados: lo usan las acciones IA para no resolver/globbea dos veces."""
-    if accion.operacion in OPERACIONES_IA:
-        from limpiador import acciones_ia  # lazy: evita ciclos y peso de red
+class AccionPlanificadora(ABC):
+    """Acción de dominio creada a partir de una configuración validada."""
 
-        return acciones_ia.planificar_ia(accion, raiz, objetivos)
+    def __init__(self, config: Accion) -> None:
+        self.config = config
 
-    if accion.operacion == "borrar":
-        if accion.papelera:
-            papelera_dir = base_papelera(accion, raiz) / nueva_marca_temporal()
-            return _operaciones_a_papelera("borrar", objetivos, papelera_dir)
+    @staticmethod
+    def desde_config(config: Accion) -> AccionPlanificadora:
+        """Selecciona el planificador que corresponde a la operación."""
+        tipos: dict[str, type[AccionPlanificadora]] = {
+            "mover": Mover, "borrar": Borrar, "renombrar": Renombrar,
+            "dedup": Deduplicar, "resumir-texto": AccionIA,
+            "clasificar-ficheros": AccionIA,
+        }
+        try:
+            return tipos[config.operacion](config)
+        except KeyError as exc:
+            raise AccionError(f"operación desconocida: {config.operacion}") from exc
+
+    @abstractmethod
+    def planificar(self, raiz: Path, objetivos: list[Path]) -> list[Operacion]:
+        """Crea un plan sin modificar el disco."""
+
+
+class AccionIA(AccionPlanificadora):
+    def planificar(self, raiz: Path, objetivos: list[Path]) -> list[Operacion]:
+        from limpiador import acciones_ia
+        return acciones_ia.planificar_ia(self.config, raiz, objetivos)
+
+
+class Borrar(AccionPlanificadora):
+    def planificar(self, raiz: Path, objetivos: list[Path]) -> list[Operacion]:
+        if self.config.papelera:
+            papelera = base_papelera(self.config, raiz) / nueva_marca_temporal()
+            return _operaciones_a_papelera("borrar", objetivos, papelera)
         return [Operacion("borrar", origen) for origen in objetivos]
 
-    if accion.operacion == "dedup":
-        # dedup es siempre reversible: los duplicados van a la papelera.
-        papelera_dir = base_papelera(accion, raiz) / nueva_marca_temporal()
-        sobrantes = _duplicados_sobrantes(objetivos)
-        return _operaciones_a_papelera("dedup", sobrantes, papelera_dir)
 
-    if accion.operacion == "mover":
-        assert accion.destino is not None  # garantizado por la validación
-        destino_dir = _dentro_seguro(accion.destino, raiz)
+class Deduplicar(AccionPlanificadora):
+    def planificar(self, raiz: Path, objetivos: list[Path]) -> list[Operacion]:
+        papelera = base_papelera(self.config, raiz) / nueva_marca_temporal()
+        return _operaciones_a_papelera("dedup", _duplicados_sobrantes(objetivos), papelera)
+
+
+class Mover(AccionPlanificadora):
+    def planificar(self, raiz: Path, objetivos: list[Path]) -> list[Operacion]:
+        assert self.config.destino is not None
+        destino_dir = _dentro_seguro(self.config.destino, raiz)
         plan: list[Operacion] = []
-        simulo_existente: set[Path] = set()
+        simulados: set[Path] = set()
         for origen in objetivos:
             if destino_dir.exists() and origen.parent == destino_dir:
-                continue  # ya está en su sitio
+                continue
             candidato = destino_dir / origen.name
-            if candidato.exists() or candidato in simulo_existente:
-                candidato = _destino_libre_simulado(candidato, simulo_existente)
-            simulo_existente.add(candidato)
+            if candidato.exists() or candidato in simulados:
+                candidato = _destino_libre_simulado(candidato, simulados)
+            simulados.add(candidato)
             plan.append(Operacion("mover", origen, candidato))
         return plan
 
-    # renombrar: añade `sufijo` antes de la extensión, en la misma carpeta.
-    assert accion.sufijo is not None  # garantizado por la validación
-    plan = []
-    simulados: set[Path] = set()
-    for origen in objetivos:
-        nuevo = origen.with_name(f"{origen.stem}-{accion.sufijo}{origen.suffix}")
-        if nuevo.exists() or nuevo in simulados:
-            nuevo = _destino_libre_simulado(nuevo, simulados)
-        simulados.add(nuevo)
-        plan.append(Operacion("renombrar", origen, nuevo))
-    return plan
+
+class Renombrar(AccionPlanificadora):
+    def planificar(self, raiz: Path, objetivos: list[Path]) -> list[Operacion]:
+        assert self.config.sufijo is not None
+        plan: list[Operacion] = []
+        simulados: set[Path] = set()
+        for origen in objetivos:
+            nuevo = origen.with_name(f"{origen.stem}-{self.config.sufijo}{origen.suffix}")
+            if nuevo.exists() or nuevo in simulados:
+                nuevo = _destino_libre_simulado(nuevo, simulados)
+            simulados.add(nuevo)
+            plan.append(Operacion("renombrar", origen, nuevo))
+        return plan
+
+
+def planificar_desde_objetivos(
+    accion: Accion, raiz: Path, objetivos: list[Path]
+) -> list[Operacion]:
+    """Planifica con la carpeta ya validada y los objetivos contados."""
+    return AccionPlanificadora.desde_config(accion).planificar(raiz, objetivos)
 
 
 def _destino_libre_simulado(destino: Path, ya_planificados: set[Path]) -> Path:
@@ -323,7 +353,7 @@ def ejecutar(
         operacion=accion.operacion,
         carpeta_base=raiz,
         entradas=entradas,
-        timestamp=datetime.now().isoformat(timespec="seconds"),
+        timestamp=datetime.now().isoformat(timespec="microseconds"),
     )
     return bitacora, manifiesto
 

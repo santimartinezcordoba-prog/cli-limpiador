@@ -26,14 +26,11 @@ from pathlib import Path
 from typing import Any, Final
 
 from limpiador.config import Accion, es_ruta_segura
+from limpiador.errores import PapeleraError
 
 CARPETA_PAPELERA_POR_DEFECTO: Final[str] = "papelera"
 DIR_MANIFIESTO: Final[str] = ".manifiesto"
 FORMATO_MARCA_TEMPORAL: Final[str] = "%Y%m%d-%H%M%S"
-
-
-class PapeleraError(Exception):
-    """Error al escribir o revertir un manifiesto de la papelera."""
 
 
 @dataclass(frozen=True)
@@ -151,7 +148,9 @@ def listar_manifiestos(papelera_base: Path) -> list[Manifiesto]:
         for ruta in sorted(carpeta.glob("*.json"))
         if (m := _leer_manifiesto(ruta)) is not None and m.deshecha is None
     ]
-    return sorted(manifiestos, key=lambda m: (m.timestamp, m.op_id), reverse=True)
+    return sorted(
+        manifiestos, key=lambda m: (m.timestamp, m.ruta.stat().st_mtime_ns, m.op_id), reverse=True
+    )
 
 
 def _ruta_restaurada(origen: Path) -> Path:

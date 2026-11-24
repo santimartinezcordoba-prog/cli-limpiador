@@ -379,3 +379,19 @@ def test_simular_papelera_no_crea_nada(
     assert resultado.exit_code == EXIT_OK
     assert "papelera" in salida  # el plan menciona el destino
     assert instantanea(objetivo) == antes
+
+
+def test_deshacer_ordena_registros_del_mismo_segundo(tmp_path: Path) -> None:
+    """Los manifiestos antiguos con el mismo segundo se ordenan por escritura."""
+    import os
+
+    from limpiador.papelera import escribir_manifiesto, listar_manifiestos
+
+    papelera = tmp_path / "papelera"
+    comun = dict(papelera_base=papelera, operacion="mover", carpeta_base=tmp_path,
+                 entradas=[], timestamp="2026-11-24T10:00:00")
+    primero = escribir_manifiesto(op_id="z", accion="primera", **comun)
+    segundo = escribir_manifiesto(op_id="a", accion="segunda", **comun)
+    os.utime(primero, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(segundo, ns=(2_000_000_000, 2_000_000_000))
+    assert [m.accion for m in listar_manifiestos(papelera)] == ["segunda", "primera"]

@@ -28,6 +28,8 @@ from pydantic import (
     model_validator,
 )
 
+from limpiador.errores import ConfigInvalidaError
+
 # Whitlist de operaciones ejecutables. El orden importa: se muestra tal cual
 # en el mensaje «valor no soportado (permitido: mover, borrar, ...)».
 OPERACIONES_VALIDAS: Final[tuple[str, ...]] = (
@@ -66,14 +68,6 @@ OPERACIONES_CON_PAPELERA: Final[frozenset[str]] = frozenset({"borrar", "dedup"})
 # Valores admitidos para el campo `modo_offline` de las acciones IA.
 MODOS_OFFLINE_VALIDOS: Final[frozenset[str]] = frozenset({"heuristica", "estricto"})
 LISTA_MODOS_OFFLINE: Final[str] = ", ".join(sorted(MODOS_OFFLINE_VALIDOS))
-
-
-class ConfigInvalidaError(Exception):
-    """Error de configuración que arrastra la lista completa de fallos."""
-
-    def __init__(self, errores: list[str]) -> None:
-        self.errores = errores
-        super().__init__("; ".join(errores))
 
 
 def es_ruta_segura(valor: str) -> bool:
