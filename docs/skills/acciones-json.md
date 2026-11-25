@@ -1,7 +1,7 @@
 # Skill: formato de `acciones.json` (con operaciones IA)
 
 > Documento para agentes/usuarios que generan o editan el fichero de
-> acciones de `limpiador`. Describe el JSON **actual** (v1.2.0): las cuatro
+> acciones de `limpiador`. Describe el JSON **actual** (v1.4.0): las cuatro
 > operaciones clásicas y las cuatro operaciones IA disponibles, cómo se valida cada
 > tipo y qué campos son obligatorios. La versión humana de referencia es el
 > README del repo; este documento y el README se mantienen coherentes.
