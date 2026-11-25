@@ -1,6 +1,6 @@
 [project]
 name = "limpiador"
-version = "1.3.0"
+version = "1.4.0"
 description = "CLI para limpiar y ordenar ficheros mediante acciones declaradas en un JSON."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -60,7 +60,7 @@ testpaths = ["tests"]
 # Se excluye el directorio `scripts/` de la recolección de tests: la utilidad
 # `scripts/escaner_secretos.py` se autodetecta como test (prefijo `test_`) pero
 # no es un test de pytest. Su comprobación real vive en
-# `tests/test_secretos.py::test_escaner_repo_limpio`.
+# `tests/test_secretos.py::test_no_hay_claves_en_repo`.
 addopts = """
 -ra
 --cov=limpiador

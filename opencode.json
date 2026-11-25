@@ -5,7 +5,7 @@
   // gaste tokens en cada sesión. Se enciende PUNTUALMENTE desde la CLI con
   // `/mcps` → context7, se consulta la doc oficial de httpx y se vuelve a
   // apagar. NO es una dependencia de `limpiador`: es una ayuda de desarrollo
-  // (ver docs/adr/0002-ia-opcional-y-redaccion-de-secretos.md).
+  // (ver docs/adr/0002-ia-opcional-sin-red-y-redaccion-de-secretos.md).
   "mcp": {
     "context7": {
       "type": "remote",

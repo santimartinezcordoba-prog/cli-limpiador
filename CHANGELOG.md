@@ -7,6 +7,24 @@ y el proyecto admite [versionado semántico](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-25
+
+### Añadido
+
+- Script `opencode run` con agente de revisión estática y permisos de lectura.
+- Pruebas de regresión para manifiestos manipulados, enlaces y seguridad de la IA.
+
+### Seguridad
+
+- HTTPS obligatorio y redirecciones automáticas desactivadas.
+- CA personalizada mediante contexto TLS y redacción literal de claves conocidas.
+- Timeout de conexión acotado y validación de valores no finitos.
+- Validación de la raíz autorizada y de las entradas antes de restaurar archivos.
+
+### Documentación
+
+- Corregidas referencias a ADR y pruebas; registrada la consulta real de Context7.
+
 ## [1.3.0] - 2026-11-25
 
 ### Añadido
@@ -185,7 +203,8 @@ documentación apagado por defecto.
 - CI con GitHub Actions (ruff, mypy, pytest, humo de instalación) en Python
   3.10, 3.11 y 3.12.
 
-[unreleased]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.3.0...HEAD
+[unreleased]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.1.0...v1.1.1

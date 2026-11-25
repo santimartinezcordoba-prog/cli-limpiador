@@ -40,7 +40,7 @@ from limpiador.errores import (
     IAError,
     PapeleraError,
 )
-from limpiador.ia import CentroIA
+from limpiador.ia import CentroIA, leer_key
 from limpiador.papelera import (
     deshacer_operacion,
     resolver_papelera_cli,
@@ -122,7 +122,7 @@ def _buscar_accion_o_salir(config: Config, nombre: str) -> Accion:
     """Devuelve la acción pedida; si no existe, explica las disponibles y sale 1."""
     try:
         return buscar_accion(config, nombre)
-    except AccionError as exc:
+    except (AccionError, PapeleraError) as exc:
         console.print(f"[red]✗ {exc}[/]")
         raise typer.Exit(EXIT_ERROR) from exc
 
@@ -271,7 +271,7 @@ def ejecutar_accion(
     motor = Motor()
     try:
         plan = motor.planificar(accion, carpeta)
-    except AccionError as exc:
+    except (AccionError, PapeleraError) as exc:
         console.print(f"[red]✗ {redact(str(exc))}[/]")
         raise typer.Exit(EXIT_ERROR) from exc
 
@@ -322,7 +322,7 @@ def ejecutar_accion(
 
     try:
         bitacora, ruta_manifiesto = motor.ejecutar(accion, carpeta, plan)
-    except (AccionError, OSError) as exc:
+    except (AccionError, PapeleraError, OSError) as exc:
         # `redact` SIEMPRE: un error del motor puede arrastrar la key del
         # centro (p. ej. un volcado de la cabecera Authorization). La consola
         # solo puede ver la máscara.
@@ -366,19 +366,23 @@ def deshacer(
     """
     _resolver_carpeta_o_salir(carpeta)
     _comprobar_limite_o_salir(carpeta)
+    secretos = (leer_key() or "",)
     try:
         papelera_base = resolver_papelera_cli(carpeta.resolve(), papelera)
-        manifiesto, bitacora = deshacer_operacion(papelera_base, n)
+        manifiesto, bitacora = deshacer_operacion(papelera_base, n, carpeta_base=carpeta)
     except (PapeleraError, OSError) as exc:
-        console.print(f"[red]✗ No se puede deshacer: {exc}[/]")
+        console.print(f"[red]✗ No se puede deshacer: {redact(str(exc), secretos=secretos)}[/]")
         raise typer.Exit(EXIT_ERROR) from exc
 
     for linea in bitacora:
         color = "yellow" if linea.startswith("AVISO") else "green"
-        console.print(f"  [{color}]✓[/] {linea}")
+        console.print(f"  [{color}]✓[/] {redact(linea, secretos=secretos)}")
     console.print(
-        f"[bold green]Deshecha la operación '{manifiesto.op_id}' "
-        f"de la acción '{manifiesto.accion}' ({manifiesto.timestamp}).[/]"
+        "[bold green]" + redact(
+            f"Deshecha la operación '{manifiesto.op_id}' "
+            f"de la acción '{manifiesto.accion}' ({manifiesto.timestamp}).",
+            secretos=secretos,
+        ) + "[/]"
     )
 
 
