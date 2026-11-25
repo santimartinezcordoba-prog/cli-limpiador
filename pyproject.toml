@@ -5,7 +5,7 @@ description = "CLI para limpiar y ordenar ficheros mediante acciones declaradas 
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
-authors = [{ name = "Tu Usuario de GitHub" }]
+authors = [{ name = "santimartinezcordoba-prog" }]
 keywords = ["cli", "limpieza", "ficheros", "typer", "rich"]
 classifiers = [
     "Environment :: Console",
