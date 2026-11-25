@@ -323,12 +323,18 @@ class CentroIA(ProveedorIA):
                 datos = respuesta.json()
         except httpx.TimeoutException as exc:
             raise SinRedError(
-                redact(f"timeout al contactar el centro ({self._timeout}s): {exc}", secretos=secretos)
+                redact(
+                    f"timeout al contactar el centro ({self._timeout}s): {exc}",
+                    secretos=secretos,
+                )
             ) from None
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
             raise SinRedError(
-                redact(f"el centro respondió HTTP {code} al pedir '{modelo_usado}'", secretos=secretos)
+                redact(
+                    f"el centro respondió HTTP {code} al pedir '{modelo_usado}'",
+                    secretos=secretos,
+                )
             ) from None
         except (httpx.RequestError, httpx.InvalidURL, OSError, ValueError) as exc:
             # RequestError: fallo de red/DNS/TLS. ValueError: cuerpo no-JSON.

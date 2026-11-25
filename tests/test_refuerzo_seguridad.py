@@ -64,7 +64,9 @@ def test_redirect_no_se_sigue(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def cliente(**kwargs: object) -> httpx.Client:
         assert kwargs["follow_redirects"] is False
-        return httpx.Client(transport=httpx.MockTransport(responder), **kwargs)  # type: ignore[arg-type]
+        return httpx.Client(
+            transport=httpx.MockTransport(responder), **kwargs  # type: ignore[arg-type]
+        )
 
     monkeypatch.setattr(CentroIA, "_nuevo_cliente", cliente)
     centro = CentroIA(
