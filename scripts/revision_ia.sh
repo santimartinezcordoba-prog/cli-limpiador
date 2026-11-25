@@ -12,14 +12,16 @@ fi
 # No copia .env, credenciales locales ni cambios sin commit.
 revision="$(mktemp -d)"
 trap 'rm -rf -- "$revision"' EXIT
-git archive HEAD src tests docs README.md SPEC.md acciones.json pyproject.toml opencode.json |
+git archive HEAD src tests docs scripts .github .opencode .gitignore .env.example \
+    LICENSE README.md SPEC.md CHANGELOG.md acciones.json pyproject.toml uv.lock opencode.json |
     tar -xf - -C "$revision"
 
 cd "$revision"
 echo "Iniciando revisión del proyecto..."
-opencode run --agent plan "Revisa los archivos de este proyecto limpiador.
+opencode run --agent revision-segura "Revisa los archivos de este proyecto limpiador.
 Comprueba estructura, seguridad y pruebas. Indica errores concretos con archivo y línea.
 Limítate a leer esta copia; no leas archivos externos, .env ni credenciales.
 No ejecutes comandos, no modifiques archivos ni consultes servicios externos.
+La copia no contiene historial Git ni archivos locales. No declares fallos de compilación o tests sin haberlos ejecutado; distingue observaciones de hipótesis.
 Devuelve un informe breve en español con posibles mejoras."
 echo "Revisión finalizada."

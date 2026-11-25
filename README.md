@@ -441,6 +441,24 @@ pip install -e ".[dev]"
 pytest && ruff check && mypy
 ```
 
+## Revisión automatizada con OpenCode (semana 4)
+
+Con OpenCode V2 y un proveedor configurado, desde la raíz del repositorio:
+
+```bash
+bash scripts/revision_ia.sh
+```
+
+El script llama a `opencode run --agent revision-segura` sobre una copia
+temporal de archivos versionados seleccionados de HEAD, incluyendo licencia,
+scripts y CI. No copia el .env local ni cambios sin commit. El agente restringe
+la revisión a herramientas de lectura, búsqueda y listado, sin shell, edición,
+subagentes ni acceso externo. La copia se elimina al terminar.
+
+La revisión es estática: sus conclusiones deben contrastarse con los archivos
+reales y con pytest, Ruff, Mypy y GitHub Actions. La conexión de OpenCode es
+independiente de la configuración de `limpiador comprobar-ia`.
+
 ## Cómo contribuir (ramas y PRs)
 
 Cada funcionalidad entra a `main` desde su rama, con commits convencionales
