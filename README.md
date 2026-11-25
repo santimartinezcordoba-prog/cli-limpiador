@@ -477,9 +477,9 @@ Ramas usadas: `feature/estructura-base`, `feature/cli-typer`,
 
 ```bash
 git checkout main && git pull
-git tag v1.2.0
-git push origin v1.2.0
-gh release create v1.2.0 --title "limpiador v1.2.0" --notes-file CHANGELOG.md
+git tag v1.3.0
+git push origin v1.3.0
+gh release create v1.3.0 --title "limpiador v1.3.0" --generate-notes
 ```
 
 ## Licencia

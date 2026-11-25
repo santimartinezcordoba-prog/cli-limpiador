@@ -7,7 +7,25 @@ y el proyecto admite [versionado semántico](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-25
+
+### Añadido
+
+- Acciones `agrupar-audio`, `crear-preguntas-repaso` y `extraer-tareas-pendientes`, con pruebas de IA simulada y modo offline.
+- Simulación previa obligatoria y comprobación de que la carpeta no cambia durante la confirmación.
+
 ### Cambiado
+
+- `ejecutar` y `deshacer` quedan limitados a `~/pruebas-tareas` y sus subcarpetas por seguridad; fuera de ellas no se permiten operaciones. `listar` sigue siendo de solo lectura.
+- La clasificación conserva el original y crea una copia en la categoría correspondiente.
+- Identificado el autor del paquete con su usuario de GitHub.
+
+### Corregido
+
+- Simulaciones sin comprobantes ni carpetas nuevas en disco, selección de archivos y renombrados que no repiten sufijos.
+- Protección de directorios de salida y registros de IA frente a enlaces simbólicos.
+
+### Documentación
 
 - README: secciones explícitas «IA», «comprobar-ia» y «MCP context7» (apagado
   por defecto, para doc de httpx), códigos de salida ampliados (3 sin key en
@@ -167,7 +185,9 @@ documentación apagado por defecto.
 - CI con GitHub Actions (ruff, mypy, pytest, humo de instalación) en Python
   3.10, 3.11 y 3.12.
 
-[unreleased]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.1.1...HEAD
+[unreleased]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/santimartinezcordoba-prog/cli-limpiador/compare/v1.0...v1.0.1
