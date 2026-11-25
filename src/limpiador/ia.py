@@ -5,7 +5,7 @@ Este módulo es la ÚNICA capa que toca la red. El motor de acciones
 modo que la lógica de negocio se testa sin Typer y sin conexión real.
 
 Forma correcta en httpx 0.28 (auditada con el MCP context7, ver ADR-0002):
-    httpx.Client(base_url=..., timeout=httpx.Timeout(...), follow_redirects=True)
+    httpx.Client(base_url=..., timeout=httpx.Timeout(...), follow_redirects=False)
 
 # obsoleto en httpx 0.28: `httpx.Client(proxies={...})` se ELIMINÓ. `proxies`
 # (plural, dict) fue marcado deprecated en 0.26 y eliminado en 0.28: ahora da
@@ -18,9 +18,10 @@ Forma correcta en httpx 0.28 (auditada con el MCP context7, ver ADR-0002):
 # cliente: pasar `verify=False` SIGUE siendo sintaxis válida en 0.28, pero el
 # parámetro está documentado como «opt-out inseguro»: desactiva por completo
 # la comprobación de certificados (MITM libre). La forma correcta con un CA
-# auto-firmado (el del centro) es `verify=<ruta-al-CA>` o un
+# auto-firmado (el del centro) es un
 # `ssl.SSLContext`; `False` solo en tests con transporte simulado. Aquí se
-# pasa `verify=LIMPIADOR_CA_BUNDLE` si existe, y `True` en otro caso.
+# crea un SSLContext con LIMPIADOR_CA_BUNDLE si existe; si no, usa True.
+# Se exige HTTPS y no se siguen redirecciones automáticamente.
 
 Modo sin red («sin dejar a nadie tirado sin red»): si falta la API key o falla
 la conexión (timeout, 503, fallo de red, error de protocolo), `completar` lanza
@@ -33,7 +34,9 @@ llegue a la consola ni al log.
 
 from __future__ import annotations
 
+import math
 import os
+import ssl
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
@@ -96,7 +99,7 @@ def leer_timeout(entorno: Mapping[str, str] | None = None) -> float:
         valor = float(crudo)
     except ValueError:
         return TIMEOUT_POR_DEFECTO
-    return valor if valor > 0 else TIMEOUT_POR_DEFECTO
+    return valor if math.isfinite(valor) and valor > 0 else TIMEOUT_POR_DEFECTO
 
 
 @dataclass(frozen=True)
@@ -190,7 +193,7 @@ def _cliente_por_defecto(**kwargs: object) -> Iterator[httpx.Client]:
 def httpx_client_apto_auditoria() -> AbstractContextManager[httpx.Client]:
     """Cliente httpx construido con la forma AUDITADA como correcta en 0.28.
 
-    Lo usa `tests/test_ia_httpx.py::test_forma_obsoleta_proxies_falla`: si
+    Lo usa `tests/test_ia.py::test_forma_obsoleta_proxies_falla`: si
     alguien reintroduce `proxies=` (o `verify=False`) en el código de red,
     ese test lo detecta. Documenta en EJECUCIÓN lo que la docencia oficial
     dice: `proxy=`/`mounts=` son la forma viva; `proxies=` murió en 0.28.
@@ -198,7 +201,7 @@ def httpx_client_apto_auditoria() -> AbstractContextManager[httpx.Client]:
     return _cliente_por_defecto(
         base_url=BASE_URL_POR_DEFECTO,
         timeout=httpx.Timeout(TIMEOUT_POR_DEFECTO),
-        follow_redirects=True,
+        follow_redirects=False,
     )
 
 
@@ -293,12 +296,19 @@ class CentroIA(ProveedorIA):
             raise SinRedError("no hay API key configurada (LIMPIADOR_IA_KEY)")
         modelo_usado = modelo or self._modelo
         inicio = time.monotonic()
+        secretos = (self._key,)
         try:
+            url = httpx.URL(self._base_url)
+            if url.scheme != "https" or not url.host or url.userinfo:
+                raise SinRedError("la URL de IA debe usar HTTPS sin credenciales en la URL")
+            verificacion = (
+                ssl.create_default_context(cafile=self._ca_bundle) if self._ca_bundle else True
+            )
             with self._fabrica_cliente()(
                 base_url=self._base_url,
-                timeout=httpx.Timeout(self._timeout),
-                follow_redirects=True,
-                verify=self._ca_bundle if self._ca_bundle else True,
+                timeout=httpx.Timeout(self._timeout, connect=min(3.0, self._timeout)),
+                follow_redirects=False,
+                verify=verificacion,
                 headers={"Authorization": f"Bearer {self._key}"},
             ) as cliente:
                 respuesta = cliente.post(
@@ -313,18 +323,27 @@ class CentroIA(ProveedorIA):
                 datos = respuesta.json()
         except httpx.TimeoutException as exc:
             raise SinRedError(
-                redact(f"timeout al contactar el centro ({self._timeout}s): {exc}")
-            ) from exc
+                redact(
+                    f"timeout al contactar el centro ({self._timeout}s): {exc}",
+                    secretos=secretos,
+                )
+            ) from None
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
             raise SinRedError(
-                redact(f"el centro respondió HTTP {code} al pedir '{modelo_usado}'")
-            ) from exc
-        except (httpx.RequestError, ValueError) as exc:
+                redact(
+                    f"el centro respondió HTTP {code} al pedir '{modelo_usado}'",
+                    secretos=secretos,
+                )
+            ) from None
+        except (httpx.RequestError, httpx.InvalidURL, OSError, ValueError) as exc:
             # RequestError: fallo de red/DNS/TLS. ValueError: cuerpo no-JSON.
             raise SinRedError(
-                redact(f"sin conexión con el centro: {type(exc).__name__}: {exc}")
-            ) from exc
+                redact(
+                    f"sin conexión con el centro: {type(exc).__name__}: {exc}",
+                    secretos=secretos,
+                )
+            ) from None
         latencia = time.monotonic() - inicio
         contenido = _extraer_contenido(datos)
         return RespuestaIA(contenido=contenido, latencia_s=latencia)

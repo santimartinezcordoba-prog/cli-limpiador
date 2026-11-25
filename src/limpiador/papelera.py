@@ -61,16 +61,8 @@ def base_papelera(accion: Accion, raiz: Path) -> Path:
     - ``papelera: true`` o ausente -> ``<raiz>/papelera``.
     - ``papelera: "DIR"``          -> ``<raiz>/DIR`` (DIR relativo y seguro).
     """
-    if isinstance(accion.papelera, str) and accion.papelera:
-        candidato = (raiz / accion.papelera).resolve()
-        try:
-            candidato.relative_to(raiz)
-        except ValueError as exc:
-            raise PapeleraError(
-                f"la papelera '{accion.papelera}' queda fuera de la carpeta objetivo"
-            ) from exc
-        return candidato
-    return raiz / CARPETA_PAPELERA_POR_DEFECTO
+    nombre = accion.papelera if isinstance(accion.papelera, str) else None
+    return resolver_papelera_cli(raiz, nombre)
 
 
 def nueva_marca_temporal() -> str:
@@ -94,7 +86,10 @@ def escribir_manifiesto(
     timestamp: str,
 ) -> Path:
     """Vuelca el manifiesto de la operación y devuelve su ruta."""
+    _validar_papelera(papelera_base, carpeta_base.resolve())
     ruta = papelera_base / DIR_MANIFIESTO / f"{op_id}.json"
+    if ruta.is_symlink():
+        raise PapeleraError("el manifiesto es un enlace simbólico")
     ruta.parent.mkdir(parents=True, exist_ok=True)
     documento = {
         "op_id": op_id,
@@ -146,7 +141,8 @@ def listar_manifiestos(papelera_base: Path) -> list[Manifiesto]:
     manifiestos = [
         m
         for ruta in sorted(carpeta.glob("*.json"))
-        if (m := _leer_manifiesto(ruta)) is not None and m.deshecha is None
+        if not ruta.is_symlink()
+        and (m := _leer_manifiesto(ruta)) is not None and m.deshecha is None
     ]
     return sorted(
         manifiestos, key=lambda m: (m.timestamp, m.ruta.stat().st_mtime_ns, m.op_id), reverse=True
@@ -174,12 +170,18 @@ def _esta_dentro(ruta: Path, raiz: Path) -> bool:
     return True
 
 
-def deshacer_operacion(papelera_base: Path, n: int = 1) -> tuple[Manifiesto, list[str]]:
+def deshacer_operacion(
+    papelera_base: Path, n: int = 1, *, carpeta_base: Path
+) -> tuple[Manifiesto, list[str]]:
     """Revierte la N-ésima operación más reciente. Devuelve bitácora de restauración.
 
     Lanza `PapeleraError` si no hay manifiesto, si la operación contiene
     borrados definitivos o si algo impide mover los ficheros de vuelta.
     """
+    raiz = carpeta_base.resolve()
+    _validar_papelera(papelera_base, raiz)
+    if n < 1:
+        raise PapeleraError("el número de operación debe ser positivo")
     manifiestos = listar_manifiestos(papelera_base)
     if not manifiestos:
         raise PapeleraError(
@@ -198,11 +200,15 @@ def deshacer_operacion(papelera_base: Path, n: int = 1) -> tuple[Manifiesto, lis
             "(activa 'papelera' en la acción para poder deshacer)"
         )
 
-    raiz = manifiesto.carpeta_base
-    bitacora: list[str] = []
-    for entrada in reversed(manifiesto.entradas):
+    if manifiesto.carpeta_base.resolve() != raiz:
+        raise PapeleraError("la carpeta del manifiesto no coincide con la carpeta autorizada")
+
+    # Validar todas las entradas antes de mover ninguna.
+    for entrada in manifiesto.entradas:
         destino, origen = entrada.destino, entrada.origen
         assert destino is not None  # comprobado arriba
+        if origen.is_symlink() or destino.is_symlink():
+            raise PapeleraError("el manifiesto contiene un enlace simbólico")
         if not destino.is_file():
             raise PapeleraError(
                 f"no se puede revertir '{origen.name}': '{destino}' ya no está en la papelera"
@@ -211,7 +217,13 @@ def deshacer_operacion(papelera_base: Path, n: int = 1) -> tuple[Manifiesto, lis
             raise PapeleraError(
                 f"el manifiesto '{manifiesto.op_id}' apunta fuera de '{raiz}': operación abortada"
             )
+    bitacora: list[str] = []
+    for entrada in reversed(manifiesto.entradas):
+        destino, origen = entrada.destino, entrada.origen
+        assert destino is not None
         destino_final = origen if not origen.exists() else _ruta_restaurada(origen)
+        if destino_final.is_symlink() or not _esta_dentro(destino_final, raiz):
+            raise PapeleraError("la ruta de restauración no es segura")
         destino_final.parent.mkdir(parents=True, exist_ok=True)
         destino.replace(destino_final)
         if destino_final == origen:
@@ -238,15 +250,28 @@ def _marcar_como_deshecha(manifiesto: Manifiesto) -> None:
         raise PapeleraError(f"no se pudo marcar el manifiesto: {exc}") from exc
 
 
+def _validar_papelera(papelera_base: Path, raiz: Path) -> None:
+    """Rechaza una papelera o directorio de manifiestos enlazado fuera de la raíz."""
+    manifiestos = papelera_base / DIR_MANIFIESTO
+    if (
+        papelera_base.is_symlink()
+        or manifiestos.is_symlink()
+        or not _esta_dentro(papelera_base, raiz)
+        or not _esta_dentro(manifiestos, raiz)
+    ):
+        raise PapeleraError("la papelera o su manifiesto queda fuera o es un enlace")
+
+
 def resolver_papelera_cli(carpeta: Path, papelera: str | None) -> Path:
     """Dir de papelera para `deshacer`: <carpeta>/papelera o <carpeta>/DIR.
 
     Rechaza path traversal (``..``) y rutas absolutas con `PapeleraError`.
     """
-    if papelera is None:
-        return carpeta / CARPETA_PAPELERA_POR_DEFECTO
+    papelera = papelera or CARPETA_PAPELERA_POR_DEFECTO
     if not es_ruta_segura(papelera):
         raise PapeleraError(
             f"la papelera '{papelera}' no es una ruta relativa segura (sin '..', absolutas ni '~')"
         )
-    return carpeta / papelera
+    candidato = carpeta / papelera
+    _validar_papelera(candidato, carpeta.resolve())
+    return candidato

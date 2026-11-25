@@ -246,7 +246,7 @@ Auditoría que hizo (con el MCP encendido, contra la doc oficial de httpx):
 `proxy=` / `mounts=`. Además, `verify=False` es válido sintácticamente pero
 inseguro: la forma correcta es `verify=<ruta-al-CA>`. El código de red de
 `limpiador` usa la forma auditada (`base_url` + `httpx.Timeout` +
-`follow_redirects` + CA bundle) y el test
+`follow_redirects=False` + contexto TLS con CA personalizada) y el test
 `test_forma_obsoleta_proxies_falla` fija en ejecución que reintroducir
 `proxies=` rompe: si alguien vuelve a ponerla, la suite lo detecta.
 
@@ -263,7 +263,7 @@ inseguro: la forma correcta es `verify=<ruta-al-CA>`. El código de red de
 | Ficheros fuera de la carpeta objetivo | Planificación y ejecución rechazan cualquier ruta que, tras `resolve()`, quede fuera | `test_no_sigue_enlaces_simbolicos_fuera_de_la_carpeta` |
 | Filtración de la API key (logs, errores, salida, repo) | `redact()` enmascara `sk-…`/`Bearer …`/key exacta antes de imprimir o loguear; `.env` ignorado; escáner en test y CI | `test_no_hay_claves_en_repo`, `test_redacta_clave_en_error`, `test_error_de_centro_sale_redactado`, `test_sin_key_es_sin_red_error_inmediato`, `test_accion_ia_offline_log_sin_clave`, `test_comprobar_ia_sin_key_texto_sin_clave` |
 | IA indisponible (sin key / sin red / centro caído) | Degradación a heurística local determinista con aviso `[modo offline]` y exit 4; `estricto` no degrada; `comprobar-ia` lo diagnostica | `test_comprobar_ia_sin_key`, `test_comprobar_ia_sin_red`, `test_accion_ia_resumir_modo_offline`, `test_accion_ia_clasificar_modo_offline`, `test_accion_ia_estricto_falla_sin_degradar` |
-| API obsoleta de httpx (rotura silenciosa al subir 0.28) | Cliente migrado a `base_url`+`httpx.Timeout`+`follow_redirects`+CA bundle; el test ejecuta la forma muerta y aserta el `TypeError` | `test_forma_obsoleta_proxies_falla` |
+| API obsoleta de httpx (rotura silenciosa al subir 0.28) | Cliente migrado a `base_url`+`httpx.Timeout`+`follow_redirects=False`+CA bundle; el test ejecuta la forma muerta y aserta el `TypeError` | `test_forma_obsoleta_proxies_falla` |
 
 ### Auditoría de tests
 
@@ -280,7 +280,7 @@ aserción fallara, la garantía correspondiente deja de ser cierta.
 | `test_validar_ok` | JSON correcto → salida 0 y «válido» | El camino feliz no puede dar falsos negativos. |
 | `test_validar_json_mal_formado` | JSON corrupto → exit 3 + «JSON inválido» con línea y columna | Un typo en el JSON debe detectarse, no ejecutarse «a medias». |
 | `test_validar_operacion_no_soportada` | exit 3 + `acciones[1].operacion: valor no soportado (permitido: mover, borrar, renombrar, dedup, resumir-texto, clasificar-ficheros, preguntas-repaso, extraer-tareas)` | La whitelist se aplica al validar, con índice y campo exactos. |
-| `test_validar_mover_sin_destino` | exit 3 + `acciones[0].destino: campo requerido ('destino' es obligatorio cuando operacion='mover')` | Coherencia entre campos: un `mover` sin destino es una bomba de relojería. |
+| `test_validar_mover_sin_destino` | exit 3 + `acciones[0]: 'destino' es obligatorio` | Coherencia entre campos: un `mover` sin destino es una bomba de relojería. |
 | `test_validar_json_flag_con_errores` | `--json` devuelve TODOS los errores como array y sale 3 | Auditoría automatizable: un script puede exigir `valido: true`. |
 | `test_simular_no_toca_disco_hash_identico` (parametrizado por operación) | SHA256 del árbol (rutas+contenidos) idéntico antes/después de `--simular` + «simulación»/«no se ha modificado» en la salida | El árbol de la carpeta de trabajo queda intacto. |
 | `test_si_mueve_las_imagenes_de_verdad` | `--si` mueve `foto.png`/`selfie.jpg` a `imagenes/` conservando el contenido | La ejecución real hace exactamente lo prometido en el plan. |
@@ -290,7 +290,7 @@ aserción fallara, la garantía correspondiente deja de ser cierta.
 | `test_deshacer_restaura_ruta_original` | Tras `--si` + `deshacer`, el fichero vuelve con su contenido | El botón de deshacer funciona de verdad. |
 | `test_deshacer_no_sobrescribe_si_existe` | El original nuevo queda intacto; lo recuperado acaba en `.restaurado` + AVISO | Deshacer nunca puede destruir datos posteriores. |
 | `test_deshacer_sin_manifiesto_sale_1` | Sin papelera → exit 1 con mensaje claro | El contrato de exit codes también es seguridad. |
-| `test_papelera_path_traversal_se_rechazada`* | `papelera: "../huida"` → exit 3 (campo exacto) | La papelera tampoco puede escribir fuera de la carpeta. |
+| `test_papelera_path_traversal_se_rechaza` | `papelera: "../huida"` → exit 3 (campo exacto) | La papelera tampoco puede escribir fuera de la carpeta. |
 | `test_dedup_mueve_duplicados_a_papelera_y_deshacer_restaura` | Dedup SHA256 deja uno, archiva el duplicado y `deshacer` lo devuelve | La operación nueva también nace reversible. |
 | `test_accion_inexistente_muestra_error_y_alternativas` | exit 1 + lista de acciones válidas | Los errores enseñan a usar la herramienta. |
 | `test_comprobar_ia_sin_key` | Sin `LIMPIADOR_IA_KEY`: exit 3, estado `sin_key`, key `ausente` y la salida NO contiene `sk-` | Diagnóstico honesto sin red ni credenciales; garantiza cero filtraciones en el mensaje de error. |
@@ -308,7 +308,6 @@ aserción fallara, la garantía correspondiente deja de ser cierta.
 | `test_redacta_clave_en_error` | Un error que contiene la key (una fake) sale enmascarada (`sk-****`) | La redacción funciona con la key real, no solo con patrones genéricos. |
 | `test_forma_obsoleta_proxies_falla` | `httpx.Client(proxies={...})` lanza `TypeError` en 0.28; `proxy=`/`mounts=` son la forma viva | Fija en ejecución la auditoría del MCP context7: si alguien reintroduce la API muerta, la suite lo detecta. |
 
-\* En el código: `test_papelera_path_traversal_se_rechaza`.
 
 ### Ejemplo de salida (`listar`)
 
@@ -441,6 +440,17 @@ pip install -e ".[dev]"
 pytest && ruff check && mypy
 ```
 
+### Refuerzo de seguridad (v1.4.0)
+
+- El cliente IA exige HTTPS sin credenciales en la URL y no sigue redirecciones.
+- Con `LIMPIADOR_CA_BUNDLE` se crea un contexto TLS con esa CA. Nunca se desactiva
+  la verificación. Un certificado no válido mantiene el modo offline.
+- El timeout de conexión se limita a 3 segundos o al timeout configurado si es menor.
+- La restauración exige que la raíz del manifiesto coincida con la carpeta indicada,
+  verifica las entradas antes de mover archivos y rechaza enlaces de papelera.
+- Las pruebas de regresión usan archivos temporales y transporte HTTP simulado.
+- La consulta real a Context7 del alumno se registra en [docs/prompts.md](docs/prompts.md).
+
 ## Revisión automatizada con OpenCode (semana 4)
 
 Con OpenCode 1.x (probado con 1.18.32) y un proveedor configurado, desde la raíz del repositorio:
@@ -495,9 +505,9 @@ Ramas usadas: `feature/estructura-base`, `feature/cli-typer`,
 
 ```bash
 git checkout main && git pull
-git tag v1.3.0
-git push origin v1.3.0
-gh release create v1.3.0 --title "limpiador v1.3.0" --generate-notes
+git tag v1.4.0
+git push origin v1.4.0
+gh release create v1.4.0 --title "limpiador v1.4.0" --generate-notes
 ```
 
 ## Licencia

@@ -79,7 +79,7 @@ amenazas/necesidades sin resolver:
    'proxies'`. La forma correcta es `proxy=<url>` (único) o
    `mounts={patrón: HTTPTransport(proxy=...)}` (routing por
    esquema/dominio/puerto). Nuestro cliente (`ia.py`) usa la forma viva
-   (`base_url` + `timeout` + `follow_redirects` + `verify=<CA>`) y el test
+   (`base_url` + `timeout` + `follow_redirects=False` + contexto TLS con CA) y el test
    `test_forma_obsoleta_proxies_falla` fija en ejecución que la forma muerta
    es `TypeError` — si alguien la reintroduce por costumbre, CI lo recuerda.
 2. **`verify=False` como callar el TLS auto-firmado.** Sigue siendo sintaxis
@@ -93,5 +93,5 @@ amenazas/necesidades sin resolver:
 - `limpiador comprobar-ia`: key «presente/ausente» (jamás el valor), ping
   con timeout y latencia; exit 0/3/4 según ok/sin key/sin red; `--json`
   parseable.
-- Suite: 88 tests en verde con `--cov-fail-under=80`, todos offline
+- Suite histórica de la semana 3: 88 tests en verde con `--cov-fail-under=80`, todos offline
   (monkeypatch del cliente httpx; NUNCA peticiones reales).
