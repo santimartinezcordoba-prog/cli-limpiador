@@ -443,7 +443,7 @@ pytest && ruff check && mypy
 
 ## Revisión automatizada con OpenCode (semana 4)
 
-Con OpenCode V2 y un proveedor configurado, desde la raíz del repositorio:
+Con OpenCode 1.x (probado con 1.18.32) y un proveedor configurado, desde la raíz del repositorio:
 
 ```bash
 bash scripts/revision_ia.sh
@@ -451,9 +451,9 @@ bash scripts/revision_ia.sh
 
 El script llama a `opencode run --agent revision-segura` sobre una copia
 temporal de archivos versionados seleccionados de HEAD, incluyendo licencia,
-scripts y CI. No copia el .env local ni cambios sin commit. El agente restringe
-la revisión a herramientas de lectura, búsqueda y listado, sin shell, edición,
-subagentes ni acceso externo. La copia se elimina al terminar.
+scripts y CI. No copia el .env local ni cambios sin commit. El agente configura permisos de OpenCode 1.x para permitir lectura y búsqueda
+y denegar shell, edición, subagentes, skills y acceso externo. Verifica los
+permisos al ejecutar con tu instalación; no es un sandbox del sistema. La copia se elimina al terminar.
 
 La revisión es estática: sus conclusiones deben contrastarse con los archivos
 reales y con pytest, Ruff, Mypy y GitHub Actions. La conexión de OpenCode es
