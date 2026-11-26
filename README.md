@@ -456,7 +456,7 @@ pytest && ruff check && mypy
 Con OpenCode 1.x (probado con 1.18.32) y un proveedor configurado, desde la raíz del repositorio:
 
 ```bash
-bash scripts/revision_ia.sh
+bash scripts/revisar.sh
 ```
 
 El script llama a `opencode run --agent revision-segura` sobre una copia
@@ -513,3 +513,25 @@ gh release create v1.4.0 --title "limpiador v1.4.0" --generate-notes
 ## Licencia
 
 MIT. Ver [LICENSE](LICENSE).
+
+
+### Permisos de OpenCode y revisión del historial
+
+La configuración de OpenCode 1.x (`opencode.json`) pide aprobación para
+ediciones y comandos de terminal, y deniega la lectura directa de `.env`.
+El subagente `revisor` usa permisos de solo lectura; el script de la semana 4
+se invoca con `bash scripts/revisar.sh` y conserva `revision_ia.sh` como
+implementación. Los permisos no son un sandbox: no autorices comandos o
+búsquedas que expongan secretos. Context7 está apagado por defecto.
+
+Para auditar los objetos alcanzables por las referencias Git locales:
+
+```bash
+git fetch --all --tags
+uv run python scripts/auditar_historial.py
+```
+
+La auditoría no imprime contenido de archivos ni valores de claves. Detecta
+nombres de archivos de entorno y patrones reconocibles en blobs de texto y
+mensajes de commit; no demuestra ausencia de secretos de cualquier formato.
+No lee archivos locales sin commit ni modifica el historial.
