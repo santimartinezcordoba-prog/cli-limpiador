@@ -16,7 +16,8 @@ uv run limpiador ...   # ejecutar la CLI desde el repo
 python scripts/escaner_secretos.py   # escáner de claves (job CI secret-scan)
 ```
 
-Orden de verificación local (igual que CI): `ruff check` → `mypy` → `pytest`.
+Orden de verificación local: `ruff check` → `mypy` → `pytest` (CI añade
+`secret-scan` antes del lint y `install-smoke` después de los tests).
 
 ## Contratos que no se pueden romper
 
@@ -65,7 +66,7 @@ Orden de verificación local (igual que CI): `ruff check` → `mypy` → `pytest
   de `acciones.json`; comando `/nueva-accion`.
 - MCP `context7` viene **apagado** (`enabled: false`): solo encenderlo
   puntualmente para docs de httpx (ADR-0002).
-  
+
 ## Normas adicionales de seguridad
 
 - Usar HTTPS y SSLContext para la conexión con la IA.
@@ -73,5 +74,6 @@ Orden de verificación local (igual que CI): `ruff check` → `mypy` → `pytest
 - No seguir redirecciones HTTP automáticamente.
 - Solicitar mi aprobación antes de modificar archivos.
 - No realizar commits sin mi autorización.
-- Mantener o mejorar la cobertura actual del 95,58 %.
+- Mantener la cobertura por encima del 95 % (el gate duro de pytest es 80 %,
+  pero el objetivo del repo es >95 %).
 - No modificar pruebas únicamente para aumentar la cobertura.
