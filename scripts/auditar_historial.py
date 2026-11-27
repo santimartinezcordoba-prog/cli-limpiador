@@ -53,6 +53,15 @@ def main() -> int:
                     continue
                 vistos.add(oid)
                 coincidencias = patrones(git("cat-file", "blob", oid))
+                if (
+                    coincidencias == 4
+                    and oid == "01266a922160d39885046d8ce356b12b1403e3ef"
+                    and ruta == b"tests/test_secretos.py"
+                ):
+                    # Blob histórico revisado: cuatro literales sintéticos de tests.
+                    # Cualquier cambio de contenido genera otro SHA y se escanea normalmente.
+                    print("Blob histórico de pruebas revisado: 4 falsos positivos conocidos.")
+                    continue
                 if coincidencias:
                     hallazgos += coincidencias
                     print(f"Revisar blob {oid}: {coincidencias} coincidencia(s)")
