@@ -271,7 +271,7 @@ def ejecutar_accion(
     motor = Motor()
     try:
         plan = motor.planificar(accion, carpeta)
-    except (AccionError, PapeleraError) as exc:
+    except (AccionError, PapeleraError, OSError, ValueError, RuntimeError) as exc:
         console.print(f"[red]✗ {redact(str(exc))}[/]")
         raise typer.Exit(EXIT_ERROR) from exc
 

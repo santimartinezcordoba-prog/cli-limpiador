@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 from limpiador.config import OPERACIONES_IA, Accion, Config
-from limpiador.errores import AccionError
+from limpiador.errores import AccionError, PapeleraError
 from limpiador.papelera import (
     EntradaManifiesto,
     base_papelera,
@@ -129,12 +129,12 @@ def _dentro_seguro(nombre: str, raiz: Path) -> Path:
 
 def _destino_libre(destino: Path) -> Path:
     """Evita sobrescribir: si el destino existe, añade -1, -2, ... al nombre."""
-    if not destino.exists():
+    if not destino.exists() and not destino.is_symlink():
         return destino
     base, sufijo, padre = destino.stem, destino.suffix, destino.parent
     for i in range(1, 10_000):
         alternativo = padre / f"{base}-{i}{sufijo}"
-        if not alternativo.exists():
+        if not alternativo.exists() and not alternativo.is_symlink():
             return alternativo
     raise AccionError(f"demasiadas colisiones de nombre para '{destino.name}'")
 
@@ -167,7 +167,7 @@ def _operaciones_a_papelera(
     simulados: set[Path] = set()
     for origen in origenes:
         candidato = papelera_dir / origen.name
-        if candidato.exists() or candidato in simulados:
+        if candidato.exists() or candidato.is_symlink() or candidato in simulados:
             candidato = _destino_libre_simulado(candidato, simulados)
         simulados.add(candidato)
         plan.append(Operacion(tipo, origen, candidato))
@@ -250,7 +250,7 @@ class Mover(AccionPlanificadora):
             if destino_dir.exists() and origen.parent == destino_dir:
                 continue
             candidato = destino_dir / origen.name
-            if candidato.exists() or candidato in simulados:
+            if candidato.exists() or candidato.is_symlink() or candidato in simulados:
                 candidato = _destino_libre_simulado(candidato, simulados)
             simulados.add(candidato)
             plan.append(Operacion("mover", origen, candidato))
@@ -267,7 +267,7 @@ class Renombrar(AccionPlanificadora):
             if re.search(rf"-{sufijo}(?:-\d+)?$", origen.stem):
                 continue
             nuevo = origen.with_name(f"{origen.stem}-{self.config.sufijo}{origen.suffix}")
-            if nuevo.exists() or nuevo in simulados:
+            if nuevo.exists() or nuevo.is_symlink() or nuevo in simulados:
                 nuevo = _destino_libre_simulado(nuevo, simulados)
             simulados.add(nuevo)
             plan.append(Operacion("renombrar", origen, nuevo))
@@ -286,7 +286,11 @@ def _destino_libre_simulado(destino: Path, ya_planificados: set[Path]) -> Path:
     base, sufijo, padre = destino.stem, destino.suffix, destino.parent
     for i in range(1, 10_000):
         alternativo = padre / f"{base}-{i}{sufijo}"
-        if not alternativo.exists() and alternativo not in ya_planificados:
+        if (
+            not alternativo.exists()
+            and not alternativo.is_symlink()
+            and alternativo not in ya_planificados
+        ):
             return alternativo
     raise AccionError(f"demasiadas colisiones de nombre para '{destino.name}'")
 
@@ -312,60 +316,89 @@ def ejecutar(
         raise AccionError(
             "las acciones IA se ejecutan con el motor de IA, no con el plan"
         )
-    for operacion in plan:
-        if not _esta_dentro(operacion.origen, raiz):
-            raise AccionError(f"'{operacion.origen}' queda fuera de '{raiz}'")
-        if (
-            isinstance(operacion.destino, Path)
-            and not _esta_dentro(operacion.destino, raiz)
-        ):
-            raise AccionError(f"el destino '{operacion.destino}' queda fuera de '{raiz}'")
+    def registrar() -> Path:
+        return escribir_manifiesto(
+            papelera_base=papelera_base,
+            op_id=nuevo_op_id(nueva_marca_temporal()),
+            accion=accion.nombre,
+            operacion=accion.operacion,
+            carpeta_base=raiz,
+            entradas=entradas,
+            timestamp=datetime.now().isoformat(timespec="microseconds"),
+        )
 
-        if operacion.tipo == "borrar" and operacion.destino is None:
-            operacion.origen.unlink()
-            bitacora.append(f"borrado {operacion.origen.name}")
-            entradas.append(EntradaManifiesto(operacion.origen, None))
-        elif operacion.tipo in {"borrar", "dedup"}:
-            # Borrar con papelera / dedup: mover en vez de destruir.
-            destino_previsto = operacion.destino_path
-            destino_previsto.parent.mkdir(parents=True, exist_ok=True)
-            destino_final = _destino_libre(destino_previsto)
-            operacion.origen.replace(destino_final)
-            etiqueta = "a papelera" if operacion.tipo == "borrar" else "duplicado a papelera"
-            bitacora.append(
-                f"{operacion.origen.name} {etiqueta} -> "
-                f"{destino_final.parent.name}/{destino_final.name}"
-            )
-            entradas.append(EntradaManifiesto(operacion.origen, destino_final))
-        elif operacion.tipo == "mover":
-            destino_previsto = operacion.destino_path
-            destino_previsto.parent.mkdir(parents=True, exist_ok=True)
-            destino_final = _destino_libre(destino_previsto)
-            operacion.origen.replace(destino_final)
-            bitacora.append(
-                f"movido {operacion.origen.name} -> "
-                f"{destino_final.parent.name}/{destino_final.name}"
-            )
-            entradas.append(EntradaManifiesto(operacion.origen, destino_final))
-        elif operacion.tipo == "renombrar":
-            destino_final = _destino_libre(operacion.destino_path)
-            operacion.origen.replace(destino_final)
-            bitacora.append(f"renombrado {operacion.origen.name} -> {destino_final.name}")
-            entradas.append(EntradaManifiesto(operacion.origen, destino_final))
-        else:  # pragma: no cover - imposible tras la validación
-            raise AccionError(f"operación desconocida: {operacion.tipo}")
+    try:
+        for operacion in plan:
+            if not _esta_dentro(operacion.origen, raiz):
+                raise AccionError(f"'{operacion.origen}' queda fuera de '{raiz}'")
+            if (
+                isinstance(operacion.destino, Path)
+                and not _esta_dentro(operacion.destino, raiz)
+            ):
+                raise AccionError(f"el destino '{operacion.destino}' queda fuera de '{raiz}'")
+
+            if operacion.tipo == "borrar" and operacion.destino is None:
+                operacion.origen.unlink()
+                bitacora.append(f"borrado {operacion.origen.name}")
+                entradas.append(EntradaManifiesto(operacion.origen, None))
+            elif operacion.tipo in {"borrar", "dedup"}:
+                # Borrar con papelera / dedup: mover en vez de destruir.
+                destino_previsto = operacion.destino_path
+                destino_previsto.parent.mkdir(parents=True, exist_ok=True)
+                destino_final = _destino_libre(destino_previsto)
+                operacion.origen.replace(destino_final)
+                etiqueta = "a papelera" if operacion.tipo == "borrar" else "duplicado a papelera"
+                bitacora.append(
+                    f"{operacion.origen.name} {etiqueta} -> "
+                    f"{destino_final.parent.name}/{destino_final.name}"
+                )
+                entradas.append(EntradaManifiesto(operacion.origen, destino_final))
+            elif operacion.tipo == "mover":
+                destino_previsto = operacion.destino_path
+                destino_previsto.parent.mkdir(parents=True, exist_ok=True)
+                destino_final = _destino_libre(destino_previsto)
+                operacion.origen.replace(destino_final)
+                bitacora.append(
+                    f"movido {operacion.origen.name} -> "
+                    f"{destino_final.parent.name}/{destino_final.name}"
+                )
+                entradas.append(EntradaManifiesto(operacion.origen, destino_final))
+            elif operacion.tipo == "renombrar":
+                destino_final = _destino_libre(operacion.destino_path)
+                operacion.origen.replace(destino_final)
+                bitacora.append(f"renombrado {operacion.origen.name} -> {destino_final.name}")
+                entradas.append(EntradaManifiesto(operacion.origen, destino_final))
+            else:  # pragma: no cover - imposible tras la validación
+                raise AccionError(f"operación desconocida: {operacion.tipo}")
+
+    except (AccionError, OSError, PapeleraError, ValueError, RuntimeError) as exc:
+        if entradas:
+            try:
+                parcial = registrar()
+            except (OSError, PapeleraError) as registro_error:
+                detalle = "; ".join(
+                    f"{e.origen} -> {e.destino}" for e in entradas
+                )
+                raise AccionError(
+                    f"fallo parcial: {exc}; no se pudo registrar: {registro_error}. "
+                    f"Pasos completados: {detalle}"
+                ) from exc
+            raise AccionError(
+                f"fallo parcial: {exc}; pasos completados: {len(entradas)}. "
+                f"Manifiesto: {parcial}"
+            ) from exc
+        raise AccionError(str(exc)) from exc
 
     if not entradas:
         return bitacora, None
-    manifiesto = escribir_manifiesto(
-        papelera_base=papelera_base,
-        op_id=nuevo_op_id(nueva_marca_temporal()),
-        accion=accion.nombre,
-        operacion=accion.operacion,
-        carpeta_base=raiz,
-        entradas=entradas,
-        timestamp=datetime.now().isoformat(timespec="microseconds"),
-    )
+    try:
+        manifiesto = registrar()
+    except (OSError, PapeleraError) as exc:
+        detalle = "; ".join(f"{e.origen} -> {e.destino}" for e in entradas)
+        raise AccionError(
+            f"operaciones realizadas, pero no se pudo registrar el manifiesto: {exc}. "
+            f"Pasos completados: {detalle}"
+        ) from exc
     return bitacora, manifiesto
 
 

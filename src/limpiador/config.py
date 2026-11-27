@@ -16,7 +16,7 @@ import json
 import os
 import re
 from collections.abc import Mapping
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Final
 
 from pydantic import (
@@ -75,12 +75,11 @@ LISTA_MODOS_OFFLINE: Final[str] = ", ".join(sorted(MODOS_OFFLINE_VALIDOS))
 
 
 def es_ruta_segura(valor: str) -> bool:
-    """True si `valor` es relativo, sin ``..`` y sin separadores de ruta.
-
-    Las acciones solo pueden actuar sobre nombres/comodines dentro de la
-    carpeta objetivo: se rechazan rutas absolutas, ``~`` y path traversal.
-    """
-    if not valor or valor.startswith("/") or valor.startswith("~"):
+    """Admite rutas relativas sin traversal, también al validar desde Linux."""
+    if not valor or "\0" in valor or valor.startswith("~"):
+        return False
+    ruta_windows = PureWindowsPath(valor)
+    if ruta_windows.drive or ruta_windows.root:
         return False
     partes = valor.replace("\\", "/").split("/")
     return ".." not in partes
@@ -88,7 +87,7 @@ def es_ruta_segura(valor: str) -> bool:
 
 def es_patron_seguro(patron: str) -> bool:
     """Un patrón solo admite comodines sobre nombres, nunca rutas."""
-    return es_ruta_segura(patron)
+    return es_ruta_segura(patron) and not any(c in patron for c in "/\\\\")
 
 
 class Accion(BaseModel):
@@ -304,10 +303,11 @@ def _chequeos_de_contenido(datos: dict[str, Any]) -> list[str]:
         patrones = item.get("patrones")
         if isinstance(patrones, list):
             for j, patron in enumerate(patrones):
-                if isinstance(patron, str) and not es_patron_seguro(patron):
+                if isinstance(patron, str) and not es_patron_seguro(patron.strip()):
                     errores.append(f"acciones[{i}].patrones[{j}]: patrón inválido o no seguro")
         nombre = item.get("nombre")
         if isinstance(nombre, str):
+            nombre = nombre.strip()
             if nombre in nombres_vistos:
                 errores.append(f"acciones[{i}].nombre: nombre duplicado '{nombre}'")
             nombres_vistos.add(nombre)
@@ -346,6 +346,8 @@ def cargar_config(ruta: Path) -> Config:
         raise ConfigInvalidaError([f"{ruta}: no es un fichero"])
     try:
         texto = ruta.read_text(encoding="utf-8")
+    except UnicodeError as exc:
+        raise ConfigInvalidaError([f"{ruta}: debe estar codificado en UTF-8"]) from exc
     except OSError as exc:
         raise ConfigInvalidaError([f"{ruta}: no se pudo leer ({exc})"]) from exc
     try:
@@ -397,7 +399,7 @@ def cargar_dotenv(ruta: Path | None = None) -> Path | None:
         return None
     try:
         lineas = candidato.read_text(encoding="utf-8").splitlines()
-    except OSError:
+    except (OSError, UnicodeError):
         return None
     for linea in lineas:
         linea = linea.strip()

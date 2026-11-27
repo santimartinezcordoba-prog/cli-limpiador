@@ -7,6 +7,17 @@ y el proyecto admite [versionado semántico](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Corregido
+
+- Validación portable de rutas Windows, patrones sin rutas y nombres duplicados.
+- Errores de codificación UTF-8 y de disco durante la planificación.
+- Manifiestos parciales para recuperar movimientos completados; colisiones con enlaces rotos.
+
+### Pruebas y documentación
+
+- Regresiones de auditoría en carpetas temporales y escaneo del historial Git en CI.
+- Matriz de evidencias de evaluación y aclaraciones de instalación y recuperación.
+
 ## [1.4.0] - 2026-11-25
 
 ### Añadido
