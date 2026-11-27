@@ -77,3 +77,54 @@ def test_error_de_disco_en_simulacion(
     assert "permiso denegado de prueba" in salida_normalizada(resultado.output)
     assert archivo.read_bytes() == b"original"
     assert list(carpeta.iterdir()) == [archivo]
+
+
+def test_fallo_parcial_conserva_archivos_y_permite_deshacer(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    carpeta = tmp_path / "pruebas"
+    carpeta.mkdir()
+    primero = carpeta / "a.png"
+    segundo = carpeta / "b.png"
+    primero.write_bytes(b"primero")
+    segundo.write_bytes(b"segundo")
+    config = escribir_config(tmp_path, CONFIG_VALIDA)
+    replace_original = Path.replace
+
+    def mover_con_fallo(self: Path, destino: Path) -> Path:
+        if self == segundo:
+            raise PermissionError("segundo archivo bloqueado")
+        return replace_original(self, destino)
+
+    with monkeypatch.context() as parche:
+        parche.setattr(Path, "replace", mover_con_fallo)
+        resultado = llamar(
+            runner, ["ejecutar", "mover-imagenes", str(carpeta), "--si"], config=config
+        )
+    assert resultado.exit_code == EXIT_ERROR
+    assert "fallo parcial" in salida_normalizada(resultado.output)
+    assert (carpeta / "imagenes" / "a.png").read_bytes() == b"primero"
+    assert segundo.read_bytes() == b"segundo"
+    restaurado = llamar(runner, ["deshacer", "--carpeta", str(carpeta)])
+    assert restaurado.exit_code == 0, restaurado.output
+    assert primero.read_bytes() == b"primero"
+    assert segundo.read_bytes() == b"segundo"
+
+
+def test_enlace_roto_no_se_sobrescribe(runner: CliRunner, tmp_path: Path) -> None:
+    carpeta = tmp_path / "pruebas"
+    imagenes = carpeta / "imagenes"
+    imagenes.mkdir(parents=True)
+    (carpeta / "foto.png").write_bytes(b"original")
+    enlace = imagenes / "foto.png"
+    try:
+        enlace.symlink_to(imagenes / "ausente.png")
+    except OSError:
+        pytest.skip("El sistema no permite crear enlaces simbólicos")
+    config = escribir_config(tmp_path, CONFIG_VALIDA)
+    resultado = llamar(
+        runner, ["ejecutar", "mover-imagenes", str(carpeta), "--si"], config=config
+    )
+    assert resultado.exit_code == 0, resultado.output
+    assert enlace.is_symlink()
+    assert (imagenes / "foto-1.png").read_bytes() == b"original"
