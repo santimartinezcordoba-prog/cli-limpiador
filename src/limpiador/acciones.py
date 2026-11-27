@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 from limpiador.config import OPERACIONES_IA, Accion, Config
-from limpiador.errores import AccionError
+from limpiador.errores import AccionError, PapeleraError
 from limpiador.papelera import (
     EntradaManifiesto,
     base_papelera,
