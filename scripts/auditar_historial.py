@@ -55,7 +55,8 @@ def main() -> int:
                 coincidencias = patrones(git("cat-file", "blob", oid))
                 if coincidencias:
                     hallazgos += coincidencias
-                    print(f"Revisar blob {oid[:12]}: {coincidencias} coincidencia(s)")
+                    print(f"Revisar blob {oid}: {coincidencias} coincidencia(s)")
+                    print(f"Ruta: {ruta.decode('utf-8', 'replace')}; commit: {commit}")
         print(f"Commits revisados: {len(commits)}; blobs únicos: {len(vistos)}")
         print(f"Archivos de entorno: {len(entornos)}; coincidencias: {hallazgos}")
         print("Auditoría de patrones: no garantiza detectar todos los secretos posibles.")
