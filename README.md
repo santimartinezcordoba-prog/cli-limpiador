@@ -49,6 +49,17 @@ limpiador version
 > Para probarla desde una copia local del repositorio:
 > `uv tool install .` o `pipx install .` (dentro de la carpeta del repo).
 
+## Evaluación y auditoría final
+
+La [matriz de evidencias de la rúbrica](docs/auditoria-rubrica.md) relaciona
+cada criterio con código, pruebas y CI, e identifica sus límites.
+
+Para usar las acciones desde fuera del repositorio, guarda una copia del
+[JSON de ejemplo](https://raw.githubusercontent.com/santimartinezcordoba-prog/cli-limpiador/main/acciones.json)
+como `acciones.json` en el directorio desde el que ejecutes la CLI, o indica
+su ruta mediante `--config`. La instalación global no instala ese fichero
+externo en tu directorio actual.
+
 ## Uso
 
 ```bash
@@ -152,6 +163,13 @@ Por qué esto hace «seguro» un borrado: mover es atómico y no destruye el
 contenido; el manifiesto convierte la papelera en un historial reversible.
 `borrar` sin papelera sigue existiendo, pero es el único caso no reversible
 (`deshacer` lo detecta y se niega).
+
+Si una operación falla después de mover o renombrar algún fichero, la CLI
+registra los pasos completados en un manifiesto parcial (si el disco lo
+permite), informa del fallo y devuelve 1. Se pueden revertir los movimientos
+registrados con `deshacer`; los borrados definitivos siguen siendo
+irreversibles. Si tampoco se puede escribir el manifiesto, se indican las
+rutas de los pasos completados para permitir la recuperación manual.
 
 ### Códigos de salida
 
@@ -304,7 +322,7 @@ aserción fallara, la garantía correspondiente deja de ser cierta.
 | `test_validar_accion_ia_sin_modelo` | Acción IA sin `modelo`: exit 3 con el campo exacto (`acciones[i]: 'modelo' es obligatorio…`) | Una acción IA sin modelo es una promesa vacía: se detecta al validar, no al ejecutar. |
 | `test_validar_modo_offline_invalido` | `modo_offline: "magia"`: exit 3 listando los valores permitidos (`heuristica`, `estricto`) | La política de degradación no se escribe a ojo: la whitelist también protege la config. |
 | `test_simular_accion_ia_no_escribe_nada` | `--simular` sobre acción IA: hash del árbol idéntico | La simulación de IA deja intacta la carpeta de trabajo. |
-| `test_no_hay_claves_en_repo` | Escanea TODOS los ficheros versionados (nunca `.env`) con patrones de key: falla si aparece alguna | «Ninguna clave en el historial» como test, no como promesa: un `sk-…` en un PR rompe la suite y el CI. |
+| `test_no_hay_claves_en_repo` | Escanea TODOS los ficheros versionados (nunca `.env`) con patrones de key: falla si aparece alguna | El test revisa los archivos versionados actuales; el script de auditoría de historial complementa esta comprobación. |
 | `test_redacta_clave_en_error` | Un error que contiene la key (una fake) sale enmascarada (`sk-****`) | La redacción funciona con la key real, no solo con patrones genéricos. |
 | `test_forma_obsoleta_proxies_falla` | `httpx.Client(proxies={...})` lanza `TypeError` en 0.28; `proxy=`/`mounts=` son la forma viva | Fija en ejecución la auditoría del MCP context7: si alguien reintroduce la API muerta, la suite lo detecta. |
 
