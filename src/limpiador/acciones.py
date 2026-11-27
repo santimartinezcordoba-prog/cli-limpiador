@@ -167,7 +167,7 @@ def _operaciones_a_papelera(
     simulados: set[Path] = set()
     for origen in origenes:
         candidato = papelera_dir / origen.name
-        if candidato.exists() or candidato in simulados:
+        if candidato.exists() or candidato.is_symlink() or candidato in simulados:
             candidato = _destino_libre_simulado(candidato, simulados)
         simulados.add(candidato)
         plan.append(Operacion(tipo, origen, candidato))
@@ -250,7 +250,7 @@ class Mover(AccionPlanificadora):
             if destino_dir.exists() and origen.parent == destino_dir:
                 continue
             candidato = destino_dir / origen.name
-            if candidato.exists() or candidato in simulados:
+            if candidato.exists() or candidato.is_symlink() or candidato in simulados:
                 candidato = _destino_libre_simulado(candidato, simulados)
             simulados.add(candidato)
             plan.append(Operacion("mover", origen, candidato))
@@ -267,7 +267,7 @@ class Renombrar(AccionPlanificadora):
             if re.search(rf"-{sufijo}(?:-\d+)?$", origen.stem):
                 continue
             nuevo = origen.with_name(f"{origen.stem}-{self.config.sufijo}{origen.suffix}")
-            if nuevo.exists() or nuevo in simulados:
+            if nuevo.exists() or nuevo.is_symlink() or nuevo in simulados:
                 nuevo = _destino_libre_simulado(nuevo, simulados)
             simulados.add(nuevo)
             plan.append(Operacion("renombrar", origen, nuevo))
@@ -286,8 +286,11 @@ def _destino_libre_simulado(destino: Path, ya_planificados: set[Path]) -> Path:
     base, sufijo, padre = destino.stem, destino.suffix, destino.parent
     for i in range(1, 10_000):
         alternativo = padre / f"{base}-{i}{sufijo}"
-        if (not alternativo.exists() and not alternativo.is_symlink()
-                and alternativo not in ya_planificados):
+        if (
+            not alternativo.exists()
+            and not alternativo.is_symlink()
+            and alternativo not in ya_planificados
+        ):
             return alternativo
     raise AccionError(f"demasiadas colisiones de nombre para '{destino.name}'")
 
@@ -384,11 +387,18 @@ def ejecutar(
                 f"fallo parcial: {exc}; pasos completados: {len(entradas)}. "
                 f"Manifiesto: {parcial}"
             ) from exc
-        raise
+        raise AccionError(str(exc)) from exc
 
     if not entradas:
         return bitacora, None
-    manifiesto = registrar()
+    try:
+        manifiesto = registrar()
+    except (OSError, PapeleraError) as exc:
+        detalle = "; ".join(f"{e.origen} -> {e.destino}" for e in entradas)
+        raise AccionError(
+            f"operaciones realizadas, pero no se pudo registrar el manifiesto: {exc}. "
+            f"Pasos completados: {detalle}"
+        ) from exc
     return bitacora, manifiesto
 
 
